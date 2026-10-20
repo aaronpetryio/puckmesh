@@ -64,6 +64,8 @@ python -m extract seasons              # data/raw/pwhl/seasons/<fetched_at>.json
 python -m extract schedule --all       # data/raw/pwhl/schedule/season_id=<n>/<fetched_at>.json
 python -m extract teams --all          # data/raw/pwhl/teams/season_id=<n>/...
 python -m extract roster --all         # data/raw/pwhl/roster/season_id=<n>/team_id=<n>/...
+python -m extract play-by-play --all   # data/raw/pwhl/play_by_play/season_id=<n>/game_id=<n>/... (final games only;
+                                       # --new-only skips games already saved, for fast backfill restarts)
 python -m extract upload               # copies new files to /Volumes/raw/pwhl/landing/
 python -m extract load                 # COPY INTO raw.pwhl.<endpoint> (only new files)
 cd transform

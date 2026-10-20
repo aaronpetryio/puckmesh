@@ -5,6 +5,7 @@
     python -m extract schedule --all
     python -m extract teams --all
     python -m extract roster --all
+    python -m extract play-by-play --all [--new-only]
     python -m extract upload
     python -m extract load
 """
@@ -15,7 +16,7 @@ from dotenv import load_dotenv
 
 from extract import raw
 from extract.client import LEAGUES, HockeyTechClient
-from extract.endpoints import roster, schedule, seasons, teams
+from extract.endpoints import play_by_play, roster, schedule, seasons, teams
 
 
 def _saved(path) -> str:
@@ -59,6 +60,19 @@ def cmd_roster(client: HockeyTechClient, args) -> None:
             print(f"season {season_id} team {team_id}: {len(response['SiteKit']['Roster'])} entries -> {_saved(path)}")
 
 
+def cmd_play_by_play(client: HockeyTechClient, args) -> None:
+    for season_id in _season_ids(client, args):
+        # The season's schedule tells us which games are final.
+        schedule_response, _ = schedule.fetch(client, season_id)
+        for game_id in play_by_play.final_game_ids(schedule_response):
+            folder = raw.RAW_ROOT / client.league / play_by_play.NAME / f"season_id={season_id}" / f"game_id={game_id}"
+            if args.new_only and folder.exists():
+                continue
+            response, params = play_by_play.fetch(client, game_id)
+            path = raw.save(client.league, play_by_play.NAME, response, params, season_id=season_id, game_id=game_id)
+            print(f"season {season_id} game {game_id}: {len(response['GC']['Pxpverbose'])} events -> {_saved(path)}")
+
+
 def cmd_upload(client: HockeyTechClient, args) -> None:
     from extract.upload import upload
 
@@ -85,11 +99,15 @@ def main() -> None:
         ("schedule", cmd_schedule, "pull the schedule for one or more seasons"),
         ("teams", cmd_teams, "pull the team list for one or more seasons"),
         ("roster", cmd_roster, "pull every team's roster for one or more seasons"),
+        ("play-by-play", cmd_play_by_play, "pull play-by-play for every final game in one or more seasons"),
     ]:
         p = sub.add_parser(name, help=help_text)
         group = p.add_mutually_exclusive_group(required=True)
         group.add_argument("--season", type=int, action="append", help="season_id (repeatable)")
         group.add_argument("--all", action="store_true", help="every season the API lists")
+        if name == "play-by-play":
+            p.add_argument("--new-only", action="store_true",
+                           help="skip games already saved locally (fast backfill restarts)")
         p.set_defaults(func=func)
 
     sub.add_parser("upload", help="copy new local raw files to the Volume").set_defaults(func=cmd_upload)

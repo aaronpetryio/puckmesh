@@ -40,9 +40,13 @@ models:
                 to: ref('stg_pwhl__teams')
                 field: team_id
       - name: home_goals
-        description: Null until the game is final.
+        description: Null until the game is final. Includes the +1 for a shootout win.
       - name: away_goals
-        description: Null until the game is final.
+        description: Null until the game is final. Includes the +1 for a shootout win.
+      - name: went_to_shootout
+        description: >
+          The schedule's own flag. Unreliable: it missed 11 of 29 shootouts (checked against
+          shootout attempts in play-by-play). Derive from stg_pwhl__shootout_attempts instead.
 
   - name: stg_pwhl__teams
     description: >
@@ -108,3 +112,139 @@ models:
               arguments:
                 min_value: 56
                 max_value: 78
+
+  - name: base_pwhl__play_by_play_events
+    description: >
+      One row per play-by-play event from the latest fetch of each game, in API order.
+      Shared fields are typed; event-specific fields stay in `event` (VARIANT) for the
+      stg_pwhl__<event type> models. Only those models should read this.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: game_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__games')
+                field: game_id
+      - name: event_type
+        description: Warns on a type we don't model yet (a new API event type).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [shot, blocked_shot, goal, penalty, faceoff, hit, goalie_change, shootout, penaltyshot]
+              config:
+                severity: warn
+      - name: period
+        description: 1-3 regulation, 4+ overtime. Null for shootout attempts.
+        data_tests:
+          - not_null:
+              config:
+                where: "event_type != 'shootout'"
+      - name: period_seconds
+        description: Seconds elapsed in the period. Null for shootout attempts.
+        data_tests:
+          - not_null:
+              config:
+                where: "event_type != 'shootout'"
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1200
+
+  - name: stg_pwhl__shots
+    description: >
+      One row per recorded shot attempt (on net, goal, blocked). The API does not record
+      missed shots. Excludes penalty shots and shootout attempts (their own models).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: shot_result
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [on_net, goal, blocked]
+      - name: shooter_player_id
+        data_tests: [not_null]
+      - name: shooting_team_id
+        data_tests: [not_null]
+      - name: x_location
+        description: 0-600 across the rink length, as recorded.
+      - name: y_location
+        description: 0-300 across the rink width, as recorded.
+
+  - name: stg_pwhl__goals
+    description: One row per goal, with assists, situation flags, and skaters on ice.
+    columns:
+      - name: goal_id
+        data_tests: [unique, not_null]
+      - name: scorer_player_id
+        data_tests: [not_null]
+      - name: scoring_team_id
+        data_tests: [not_null]
+
+  - name: stg_pwhl__penalties
+    description: One row per penalty called.
+    columns:
+      - name: penalty_id
+        data_tests: [unique, not_null]
+      - name: penalized_team_id
+        data_tests: [not_null]
+
+  - name: stg_pwhl__faceoffs
+    description: One row per faceoff.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: winning_team_id
+        data_tests: [not_null]
+
+  - name: stg_pwhl__hits
+    description: One row per hit. Not recorded for every game (none in the 2024 preseason).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: hitter_player_id
+        data_tests: [not_null]
+
+  - name: stg_pwhl__goalie_changes
+    description: >
+      One row per goalie change, including each team's starter at 0:00.
+      goalie_in null = net emptied; goalie_out null = game start.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: team_id
+        data_tests: [not_null]
+
+  - name: stg_pwhl__shootout_attempts
+    description: One row per shootout attempt, ordered by attempt_number. No period or clock.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: shooter_player_id
+        data_tests: [not_null]
+      - name: is_goal
+        description: Null where the API left the result blank.
+
+  - name: stg_pwhl__penalty_shots
+    description: One row per in-game penalty shot. Scored ones also appear in stg_pwhl__goals.
+    columns:
+      - name: penalty_shot_id
+        data_tests: [unique, not_null]
+      - name: shooter_player_id
+        data_tests: [not_null]

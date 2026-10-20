@@ -35,3 +35,9 @@ sources:
           Responses from feed=modulekit&view=roster, one file per season per team per (changed) fetch.
           `_meta` carries both season_id and team_id.
         columns: *raw_columns
+
+      - name: play_by_play
+        description: >
+          Responses from feed=gc&tab=pxpverbose, one file per final game per (changed) fetch.
+          `_meta` carries season_id and game_id.
+        columns: *raw_columns
