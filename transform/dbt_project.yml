@@ -1,0 +1,28 @@
+name: puckmesh
+version: "0.1.0"
+config-version: 2
+profile: puckmesh
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+snapshot-paths: ["snapshots"]
+clean-targets: ["target", "dbt_packages"]
+
+# Bronze is the raw catalog (raw.<league>.<endpoint>), loaded by extract/load.py
+# and declared as dbt sources. dbt builds silver and gold only.
+# Folders map to schemas. In dev these get your prefix (dev.dbt_apetry_silver);
+# in prod they're used as-is (prod.silver). See macros/generate_schema_name.sql.
+models:
+  puckmesh:
+    staging:
+      +schema: silver
+      +materialized: view
+    intermediate:
+      +schema: silver
+      +materialized: view
+    marts:
+      +schema: gold
+      +materialized: table

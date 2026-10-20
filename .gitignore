@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+
+# Raw API responses (kept locally for replay, never committed)
+data/raw/
+
+# dbt
+transform/target/
+transform/dbt_packages/
+transform/logs/
+logs/
+
+# Secrets
+.env
+transform/.user.yml

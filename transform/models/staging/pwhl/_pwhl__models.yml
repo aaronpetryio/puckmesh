@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: stg_pwhl__seasons
+    description: One row per PWHL season (regular, preseason, playoffs), from the latest seasons fetch.
+    columns:
+      - name: season_id
+        data_tests: [unique, not_null]
+      - name: season_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [regular, preseason, playoffs]
+
+  - name: stg_pwhl__games
+    description: One row per PWHL game, typed and renamed from the latest schedule fetch for each season.
+    columns:
+      - name: game_id
+        data_tests: [unique, not_null]
+      - name: season_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__seasons')
+                field: season_id
+      - name: home_team_id
+        data_tests: [not_null]
+      - name: away_team_id
+        data_tests: [not_null]
+      - name: home_goals
+        description: Null until the game is final.
+      - name: away_goals
+        description: Null until the game is final.

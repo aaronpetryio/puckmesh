@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: pwhl
+    description: >
+      Raw PWHL HockeyTech API responses, one row per file, loaded by
+      `python -m extract load` (COPY INTO). Read-only for dbt in every target.
+    database: raw
+    schema: pwhl
+    # No freshness check yet: the extractor skips unchanged responses, so no new
+    # rows can mean "nothing changed" (off-season) rather than "pipeline broken".
+    tables:
+      - name: seasons
+        description: Responses from feed=modulekit&view=seasons.
+        columns: &raw_columns
+          - name: payload
+            description: Whole raw file as VARIANT. `_meta` (league, endpoint, season_id, fetched_at) + `response` (untouched API JSON).
+            data_tests: [not_null]
+          - name: source_file
+            description: File path in /Volumes/raw/pwhl/landing/.
+            data_tests: [unique, not_null]
+          - name: loaded_at
+            description: When COPY INTO loaded the file.
+
+      - name: schedule
+        description: Responses from feed=modulekit&view=schedule, one file per season per (changed) fetch.
+        columns: *raw_columns
