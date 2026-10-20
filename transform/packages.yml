@@ -1,0 +1,4 @@
+packages:
+  # Generic tests beyond dbt's built-ins (multi-column uniqueness, ranges).
+  - package: dbt-labs/dbt_utils
+    version: [">=1.3.0", "<2.0.0"]

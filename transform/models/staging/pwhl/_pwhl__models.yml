@@ -26,10 +26,85 @@ models:
                 to: ref('stg_pwhl__seasons')
                 field: season_id
       - name: home_team_id
-        data_tests: [not_null]
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__teams')
+                field: team_id
       - name: away_team_id
-        data_tests: [not_null]
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__teams')
+                field: team_id
       - name: home_goals
         description: Null until the game is final.
       - name: away_goals
         description: Null until the game is final.
+
+  - name: stg_pwhl__teams
+    description: >
+      One row per team per season, from the latest teams fetch for each season. Names,
+      codes, and logos change between seasons, so (team_id, season_id) is the key.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_id, season_id]
+    columns:
+      - name: team_id
+        data_tests: [not_null]
+      - name: season_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__seasons')
+                field: season_id
+      - name: team_code
+        data_tests: [not_null]
+      - name: is_placeholder
+        description: True for the "TBD" team that playoff brackets list before matchups are set.
+
+  - name: stg_pwhl__roster_players
+    description: >
+      One row per player per team per season, from the latest roster fetch for each
+      team-season. Coaching staff are excluded. A player traded mid-season has one row per team.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, team_id, season_id]
+    columns:
+      - name: player_id
+        data_tests: [not_null]
+      - name: team_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__teams')
+                field: team_id
+      - name: season_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pwhl__seasons')
+                field: season_id
+      - name: position
+        description: Position as the API reports it (F, D, G, C, LW, RW, LD, RD).
+      - name: position_group
+        description: F, D, or G.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [F, D, G]
+      - name: height_inches
+        description: Parsed from the API's free-text height. Null when blank or unparseable.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 56
+                max_value: 78

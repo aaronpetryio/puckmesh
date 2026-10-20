@@ -1,10 +1,11 @@
 """Write API responses to the local raw store, one file per call.
 
 Layout (mirrors the Volume, so upload is a straight copy):
-    data/raw/<league>/<endpoint>/[season_id=<n>/]<fetched_at>.json
+    data/raw/<league>/<endpoint>/[season_id=<n>/[team_id=<n>/]]<fetched_at>.json
 
 Each file is a single-line JSON envelope:
-    {"_meta": {league, endpoint, season_id, params, fetched_at}, "response": <API JSON>}
+    {"_meta": {league, endpoint, <partition keys>, params, fetched_at}, "response": <API JSON>}
+Partition keys (season_id, team_id, ...) are whatever the call was scoped to.
 The response is stored as returned; nothing is renamed or dropped.
 
 A response identical to the newest file in the same folder is not saved again,
@@ -21,11 +22,15 @@ RAW_ROOT = Path(__file__).resolve().parent.parent / "data" / "raw"
 _REDACTED_PARAMS = {"key", "client_code", "fmt", "lang"}
 
 
-def save(league: str, endpoint: str, response, params: dict, season_id: int | None = None) -> Path | None:
-    """Write the response to a new file, or return None if it matches the newest saved one."""
+def save(league: str, endpoint: str, response, params: dict, **partitions: int) -> Path | None:
+    """Write the response to a new file, or return None if it matches the newest saved one.
+
+    `partitions` (e.g. season_id=8, team_id=4) become nested folders, in the order given,
+    and are recorded in _meta.
+    """
     folder = RAW_ROOT / league / endpoint
-    if season_id is not None:
-        folder = folder / f"season_id={season_id}"
+    for key, value in partitions.items():
+        folder = folder / f"{key}={value}"
     if _normalize(response) == _normalize(_latest_response(folder)):
         return None
 
@@ -34,7 +39,7 @@ def save(league: str, endpoint: str, response, params: dict, season_id: int | No
         "_meta": {
             "league": league,
             "endpoint": endpoint,
-            "season_id": season_id,
+            **partitions,
             "params": {k: v for k, v in params.items() if k not in _REDACTED_PARAMS},
             "fetched_at": fetched_at.isoformat(),
         },

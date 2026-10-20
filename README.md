@@ -62,9 +62,12 @@ pip install -r requirements.txt
 ```powershell
 python -m extract seasons              # data/raw/pwhl/seasons/<fetched_at>.json
 python -m extract schedule --all       # data/raw/pwhl/schedule/season_id=<n>/<fetched_at>.json
+python -m extract teams --all          # data/raw/pwhl/teams/season_id=<n>/...
+python -m extract roster --all         # data/raw/pwhl/roster/season_id=<n>/team_id=<n>/...
 python -m extract upload               # copies new files to /Volumes/raw/pwhl/landing/
 python -m extract load                 # COPY INTO raw.pwhl.<endpoint> (only new files)
 cd transform
+dotenv -f ../.env run -- dbt deps      # first time, or after changing packages.yml
 dotenv -f ../.env run -- dbt build     # sources → staging, plus tests
 ```
 
