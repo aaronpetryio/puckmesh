@@ -1,0 +1,116 @@
+version: 2
+
+models:
+  - name: dim_team
+    description: One row per team (placeholders excluded), with its most recent name, code, and logo.
+    columns:
+      - name: team_id
+        data_tests: [unique, not_null]
+      - name: team_name
+        data_tests: [not_null]
+
+  - name: dim_player
+    description: >
+      One row per player who has appeared on a roster, with attributes from their most
+      recent roster entry and career span.
+    data_tests:
+      # The same person under two player_ids would show up as a repeated name + birthdate.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [full_name, birthdate]
+          config:
+            severity: warn
+    columns:
+      - name: player_id
+        data_tests: [unique, not_null]
+      - name: full_name
+        data_tests: [not_null]
+
+  - name: fct_player_team_seasons
+    description: One row per player per team per season rostered. A mid-season trade gives two rows.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, team_id, season_id]
+    columns:
+      - name: player_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_player')
+                field: player_id
+      - name: team_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_team')
+                field: team_id
+
+  - name: fct_games
+    description: >
+      One row per game, played or scheduled. Team names are as of that season. Shootouts
+      come from shootout attempts, not the schedule's unreliable flag.
+    columns:
+      - name: game_id
+        data_tests: [unique, not_null]
+      - name: home_team_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_team')
+                field: team_id
+      - name: away_team_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_team')
+                field: team_id
+      - name: decision
+        description: regulation, overtime, or shootout. Null until final.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [regulation, overtime, shootout]
+          - not_null:
+              config:
+                where: is_final
+      - name: winning_team_id
+        data_tests:
+          - not_null:
+              config:
+                where: is_final
+      - name: shootout_winning_team_id
+        description: Must agree with the final score when there was a shootout.
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "= winning_team_id"
+              config:
+                where: went_to_shootout
+
+  - name: fct_shots
+    description: >
+      One row per recorded shot attempt (on net, goal, blocked) with xG-ready context.
+      The API does not record missed shots. Distances are approximate.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: game_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_games')
+                field: game_id
+      - name: shooter_player_id
+        description: Warns if a shooter never appears on a roster.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_player')
+                field: player_id
+              config:
+                severity: warn
+      - name: is_rebound
+        description: Within 3 seconds of the same team's previous unblocked shot in the period.

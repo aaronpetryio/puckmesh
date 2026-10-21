@@ -11,6 +11,14 @@ analysis-paths: ["analyses"]
 snapshot-paths: ["snapshots"]
 clean-targets: ["target", "dbt_packages"]
 
+vars:
+  # HockeyTech's shot grid is 600 x 300 and not drawn to scale. Goals cluster at x ~50
+  # and ~550, so the goal lines are ~500 units apart; real goal lines are 178 ft apart.
+  # Approximate; revisit when validating the xG model.
+  rink_net_x: 550            # attacking net after normalizing every shot to attack right
+  rink_center_y: 150
+  rink_units_per_foot: 2.81  # 500 units / 178 ft
+
 # Bronze is the raw catalog (raw.<league>.<endpoint>), loaded by extract/load.py
 # and declared as dbt sources. dbt builds silver and gold only.
 # Folders map to schemas. In dev these get your prefix (dev.dbt_apetry_silver);
