@@ -1,0 +1,67 @@
+name: pipeline
+
+# Daily: active seasons and recent games. Weekly (Monday): everything, to catch
+# corrections and new fields in historical data. Either can also be run by hand.
+on:
+  schedule:
+    - cron: "0 11 * * *"   # daily, 11:00 UTC (6-7am Eastern)
+    - cron: "0 12 * * 1"   # Mondays, 12:00 UTC: full refresh
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: daily (active seasons, recent games) or full (everything)
+        type: choice
+        options: [daily, full]
+        default: daily
+
+# Never run two pipelines at once; a second one waits for the first.
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      # Only the dev target reads this; prod uses clean schema names.
+      DBT_SCHEMA: ci
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '0 12 * * 1' && 'full' || 'daily') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Extract, upload, load (${{ env.MODE }})
+        run: python -m extract run --mode "$MODE"
+
+      - name: dbt build (prod)
+        working-directory: transform
+        run: |
+          dbt deps
+          dbt build --target prod
+
+      - name: Keep dbt logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-${{ github.run_id }}
+          path: |
+            transform/logs/
+            transform/target/run_results.json
+          retention-days: 14
+          if-no-files-found: ignore

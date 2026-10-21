@@ -8,15 +8,25 @@
     python -m extract play-by-play --all [--new-only]
     python -m extract upload
     python -m extract load
+    python -m extract run --mode daily|full     (what the scheduled job runs)
+    python -m extract backfill-hashes           (one-time migration)
 """
 
 import argparse
+from functools import cache
 
 from dotenv import load_dotenv
 
 from extract import raw
 from extract.client import LEAGUES, HockeyTechClient
 from extract.endpoints import play_by_play, roster, schedule, seasons, teams
+from extract.state import State
+
+
+@cache
+def _state(league: str) -> State:
+    # What's already stored, from the raw tables. Loaded once per command.
+    return State.load(league)
 
 
 def _saved(path) -> str:
@@ -32,21 +42,21 @@ def _season_ids(client: HockeyTechClient, args) -> list[int]:
 
 def cmd_seasons(client: HockeyTechClient, args) -> None:
     response, params = seasons.fetch(client)
-    path = raw.save(client.league, seasons.NAME, response, params)
+    path = raw.save(client.league, seasons.NAME, response, params, _state(client.league))
     print(f"{len(seasons.season_ids(response))} seasons -> {_saved(path)}")
 
 
 def cmd_schedule(client: HockeyTechClient, args) -> None:
     for season_id in _season_ids(client, args):
         response, params = schedule.fetch(client, season_id)
-        path = raw.save(client.league, schedule.NAME, response, params, season_id=season_id)
+        path = raw.save(client.league, schedule.NAME, response, params, _state(client.league), season_id=season_id)
         print(f"season {season_id}: {len(response['SiteKit']['Schedule'])} games -> {_saved(path)}")
 
 
 def cmd_teams(client: HockeyTechClient, args) -> None:
     for season_id in _season_ids(client, args):
         response, params = teams.fetch(client, season_id)
-        path = raw.save(client.league, teams.NAME, response, params, season_id=season_id)
+        path = raw.save(client.league, teams.NAME, response, params, _state(client.league), season_id=season_id)
         print(f"season {season_id}: {len(teams.team_ids(response))} teams -> {_saved(path)}")
 
 
@@ -56,7 +66,7 @@ def cmd_roster(client: HockeyTechClient, args) -> None:
         teams_response, _ = teams.fetch(client, season_id)
         for team_id in teams.team_ids(teams_response):
             response, params = roster.fetch(client, season_id, team_id)
-            path = raw.save(client.league, roster.NAME, response, params, season_id=season_id, team_id=team_id)
+            path = raw.save(client.league, roster.NAME, response, params, _state(client.league), season_id=season_id, team_id=team_id)
             print(f"season {season_id} team {team_id}: {len(response['SiteKit']['Roster'])} entries -> {_saved(path)}")
 
 
@@ -65,11 +75,11 @@ def cmd_play_by_play(client: HockeyTechClient, args) -> None:
         # The season's schedule tells us which games are final.
         schedule_response, _ = schedule.fetch(client, season_id)
         for game_id in play_by_play.final_game_ids(schedule_response):
-            folder = raw.RAW_ROOT / client.league / play_by_play.NAME / f"season_id={season_id}" / f"game_id={game_id}"
-            if args.new_only and folder.exists():
+            partitions = {"season_id": season_id, "game_id": game_id}
+            if args.new_only and _state(client.league).has(play_by_play.NAME, partitions):
                 continue
             response, params = play_by_play.fetch(client, game_id)
-            path = raw.save(client.league, play_by_play.NAME, response, params, season_id=season_id, game_id=game_id)
+            path = raw.save(client.league, play_by_play.NAME, response, params, _state(client.league), **partitions)
             print(f"season {season_id} game {game_id}: {len(response['GC']['Pxpverbose'])} events -> {_saved(path)}")
 
 
@@ -85,6 +95,19 @@ def cmd_load(client: HockeyTechClient, args) -> None:
 
     for endpoint, rows in load(client.league).items():
         print(f"{endpoint}: {rows} new rows")
+
+
+def cmd_run(client: HockeyTechClient, args) -> None:
+    from extract.pipeline import run
+
+    run(client, args.mode)
+
+
+def cmd_backfill_hashes(client: HockeyTechClient, args) -> None:
+    from extract.load import backfill_hashes
+
+    for endpoint, rows in backfill_hashes(client.league).items():
+        print(f"{endpoint}: {rows} rows given a content_hash")
 
 
 def main() -> None:
@@ -107,11 +130,19 @@ def main() -> None:
         group.add_argument("--all", action="store_true", help="every season the API lists")
         if name == "play-by-play":
             p.add_argument("--new-only", action="store_true",
-                           help="skip games already saved locally (fast backfill restarts)")
+                           help="skip games already stored (fast backfill restarts)")
         p.set_defaults(func=func)
 
     sub.add_parser("upload", help="copy new local raw files to the Volume").set_defaults(func=cmd_upload)
     sub.add_parser("load", help="COPY INTO raw tables from the Volume").set_defaults(func=cmd_load)
+
+    p = sub.add_parser("run", help="fetch changed data, upload, and load (the scheduled job)")
+    p.add_argument("--mode", choices=["daily", "full"], default="daily",
+                   help="daily: active seasons and recent games; full: everything")
+    p.set_defaults(func=cmd_run)
+
+    sub.add_parser("backfill-hashes", help="one-time: hash raw rows loaded before hashes existed"
+                   ).set_defaults(func=cmd_backfill_hashes)
 
     args = parser.parse_args()
     args.func(HockeyTechClient(args.league), args)

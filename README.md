@@ -40,7 +40,7 @@ Parquet in R2/S3 ──► Website (static pages + DuckDB-WASM search)
 
 ---
 
-## Running it (Phase 0)
+## Running it
 
 **One-time Databricks setup.** dbt creates schemas, but not catalogs or Volumes. Run once in the SQL editor:
 ```sql
@@ -58,14 +58,30 @@ python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-**Extract → upload → transform.**
+**Scheduled (GitHub Actions).** [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) runs
+`python -m extract run` then `dbt build --target prod`:
+- **daily** (11:00 UTC): season list; schedule, teams, and rosters for active seasons (a month before
+  start to two weeks after end); play-by-play for final games not yet stored, plus the last 3 days' games.
+- **full** (Mondays 12:00 UTC): every endpoint for every season and game, to catch corrections and new
+  fields in historical data.
+- Run either by hand: GitHub → Actions → pipeline → Run workflow.
+- Needs repository secrets `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_HTTP_PATH`
+  (Settings → Secrets and variables → Actions).
+
+**Change detection.** Each response is hashed (SHA-256 of its JSON, keys sorted, empty `[]`/`{}`
+treated alike). The hash goes in the file's `_meta` and in the raw table's `content_hash` column.
+Before saving, the extractor reads the latest hash per endpoint/season/team/game from the raw tables
+and skips identical responses, so raw holds one file per *change*, not per fetch, on any machine.
+
+**Same steps by hand.**
 ```powershell
+python -m extract run --mode daily     # what the schedule runs: fetch changed data, upload, load
 python -m extract seasons              # data/raw/pwhl/seasons/<fetched_at>.json
 python -m extract schedule --all       # data/raw/pwhl/schedule/season_id=<n>/<fetched_at>.json
 python -m extract teams --all          # data/raw/pwhl/teams/season_id=<n>/...
 python -m extract roster --all         # data/raw/pwhl/roster/season_id=<n>/team_id=<n>/...
 python -m extract play-by-play --all   # data/raw/pwhl/play_by_play/season_id=<n>/game_id=<n>/... (final games only;
-                                       # --new-only skips games already saved, for fast backfill restarts)
+                                       # --new-only skips games already stored, for fast backfill restarts)
 python -m extract upload               # copies new files to /Volumes/raw/pwhl/landing/
 python -m extract load                 # COPY INTO raw.pwhl.<endpoint> (only new files)
 cd transform
@@ -121,9 +137,11 @@ NCAA women's, Worlds, Olympics. Likely different sources and scrapers; only the 
 ├── extract/               # Python: API client, endpoints, upload to Volume
 │   ├── client.py          # league-parameterized HockeyTech client
 │   ├── endpoints/
-│   ├── raw.py             # save responses locally (skips unchanged)
+│   ├── raw.py             # save responses locally (skips unchanged, by content hash)
+│   ├── state.py           # latest stored hash per endpoint/partition, read from raw tables
 │   ├── upload.py          # local files → Volume
-│   └── load.py            # Volume → raw tables (COPY INTO)
+│   ├── load.py            # Volume → raw tables (COPY INTO)
+│   └── pipeline.py        # daily / full scheduled runs
 ├── data/raw/              # local copy of raw JSON (gitignored)
 ├── transform/             # dbt project
 │   └── models/

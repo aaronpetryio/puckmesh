@@ -1,20 +1,24 @@
 """Write API responses to the local raw store, one file per call.
 
 Layout (mirrors the Volume, so upload is a straight copy):
-    data/raw/<league>/<endpoint>/[season_id=<n>/[team_id=<n>/]]<fetched_at>.json
+    data/raw/<league>/<endpoint>/[season_id=<n>/[team_id=<n>/|game_id=<n>/]]<fetched_at>.json
 
 Each file is a single-line JSON envelope:
-    {"_meta": {league, endpoint, <partition keys>, params, fetched_at}, "response": <API JSON>}
-Partition keys (season_id, team_id, ...) are whatever the call was scoped to.
+    {"_meta": {league, endpoint, <partition keys>, params, fetched_at, content_hash},
+     "response": <API JSON>}
+Partition keys (season_id, team_id, game_id) are whatever the call was scoped to.
 The response is stored as returned; nothing is renamed or dropped.
 
-A response identical to the newest file in the same folder is not saved again,
-so the files in a folder are a history of changes, not of fetches.
+A response whose content hash matches the latest stored one for the same endpoint and
+partition is not saved again, so stored files are a history of changes, not of fetches.
 """
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+
+from extract.state import State
 
 RAW_ROOT = Path(__file__).resolve().parent.parent / "data" / "raw"
 
@@ -22,16 +26,20 @@ RAW_ROOT = Path(__file__).resolve().parent.parent / "data" / "raw"
 _REDACTED_PARAMS = {"key", "client_code", "fmt", "lang"}
 
 
-def save(league: str, endpoint: str, response, params: dict, **partitions: int) -> Path | None:
-    """Write the response to a new file, or return None if it matches the newest saved one.
+def content_hash(response) -> str:
+    """SHA-256 of the response's content: key order and the []/{} empty-field quirk ignored."""
+    canonical = json.dumps(_normalize(response), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def save(league: str, endpoint: str, response, params: dict, state: State, **partitions: int) -> Path | None:
+    """Write the response to a new file, or return None if its content is already stored.
 
     `partitions` (e.g. season_id=8, team_id=4) become nested folders, in the order given,
     and are recorded in _meta.
     """
-    folder = RAW_ROOT / league / endpoint
-    for key, value in partitions.items():
-        folder = folder / f"{key}={value}"
-    if _normalize(response) == _normalize(_latest_response(folder)):
+    digest = content_hash(response)
+    if state.latest_hash(endpoint, partitions) == digest:
         return None
 
     fetched_at = datetime.now(timezone.utc)
@@ -42,31 +50,28 @@ def save(league: str, endpoint: str, response, params: dict, **partitions: int) 
             **partitions,
             "params": {k: v for k, v in params.items() if k not in _REDACTED_PARAMS},
             "fetched_at": fetched_at.isoformat(),
+            "content_hash": digest,
         },
         "response": response,
     }
 
+    folder = RAW_ROOT / league / endpoint
+    for key, value in partitions.items():
+        folder = folder / f"{key}={value}"
     folder.mkdir(parents=True, exist_ok=True)
 
     # No colons: the filename has to be valid on Windows too.
     path = folder / f"{fetched_at.strftime('%Y%m%dT%H%M%S%fZ')}.json"
     path.write_text(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    state.record(endpoint, partitions, digest)
     return path
 
 
 def _normalize(value):
-    """For comparison only: HockeyTech returns an empty field as [] on some calls and {} on
-    others (seen on `broadcasters`), which would look like a change on every other fetch."""
+    """HockeyTech returns an empty field as [] on some calls and {} on others (seen on
+    `broadcasters`), which would look like a change on every other fetch."""
     if isinstance(value, dict):
         return {k: _normalize(v) for k, v in value.items()} or None
     if isinstance(value, list):
         return [_normalize(v) for v in value] or None
     return value
-
-
-def _latest_response(folder: Path):
-    # Filenames are UTC timestamps, so the lexically last one is the newest.
-    files = sorted(folder.glob("*.json")) if folder.exists() else []
-    if not files:
-        return None
-    return json.loads(files[-1].read_text(encoding="utf-8"))["response"]
