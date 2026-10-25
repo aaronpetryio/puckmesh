@@ -1,0 +1,18 @@
+# YAML lint rules (dbt project files, workflows). See docs/style-guide/dbt.md, "YAML".
+extends: default
+
+ignore: |
+  transform/target/
+  transform/dbt_packages/
+  transform/package-lock.yml
+
+rules:
+  # Deviation: dbt Labs uses 80. Long descriptions should fold with `>` instead.
+  line-length:
+    max: 100
+  document-start: disable
+  # GitHub Actions' `on:` key reads as a boolean to YAML 1.1 parsers.
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
