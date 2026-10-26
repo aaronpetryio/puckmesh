@@ -17,3 +17,9 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    ignore:
+      # dbt-databricks caps these, and pip already installs the newest versions it allows.
+      # Bumping them past the cap makes requirements.txt impossible to install (PR #7).
+      - dependency-name: databricks-sdk
+      - dependency-name: databricks-sql-connector
+      - dependency-name: dbt-core
