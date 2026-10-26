@@ -19,11 +19,19 @@ teams as (
 ),
 
 shootout_attempts as (
-    select * from {{ ref('stg_pwhl__shootout_attempts') }}
+    select
+        game_id,
+        shooting_team_id,
+        is_winning_goal
+    from {{ ref('stg_pwhl__shootout_attempts') }}
 ),
 
 shots as (
-    select * from {{ ref('stg_pwhl__shots') }}
+    select
+        game_id,
+        shooting_team_id,
+        shot_result
+    from {{ ref('stg_pwhl__shots') }}
 ),
 
 shootouts as (

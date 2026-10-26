@@ -12,8 +12,8 @@ SQL layout is in [sql.md](sql.md).
 raw.<league>.<endpoint>         bronze   loaded by extract/, declared as sources, read-only to dbt
   └─ staging/<league>/           silver   stg_<league>__<entity>s, one per source table
        └─ base/                           base_<league>__<entity>s, shared prep for several stg models
-  └─ intermediate/               silver   int_<entity>s_<verb>s, league-agnostic
-  └─ marts/                      gold     dim_<entity>s, fct_<event>s, read by ML and the website
+  └─ intermediate/               silver   int_<entity>s_<verb>ed, league-agnostic
+  └─ marts/                      gold     dim_<entity>s, fct_<grain>s, read by ML and the website
 ```
 
 | Layer | Allowed | Not allowed | Materialized |
@@ -47,9 +47,9 @@ raw.<league>.<endpoint>         bronze   loaded by extract/, declared as sources
 |---|---|---|
 | base | `base_<league>__<entity>s` | `base_pwhl__play_by_play_events` |
 | staging | `stg_<league>__<entity>s` | `stg_pwhl__shots` |
-| intermediate | `int_<entity>s_<verb>s` (no league: it's cross-league) | `int_shots_enriched` |
+| intermediate | `int_<entity>s_<verb>ed`, the verb saying what was done (no league: it's cross-league) | `int_shots_enriched` |
 | marts, dimension | `dim_<entity>s` | `dim_players` |
-| marts, fact | `fct_<event>s` | `fct_shots`, `fct_player_team_seasons` |
+| marts, fact | `fct_<grain>s`, named for what one row is | `fct_shots`, `fct_games`, `fct_player_team_seasons` |
 
 - Plural, snake_case, no dots. dbt: "Models should be pluralized."
 - Double underscore between league and entity, so the source part is unambiguous.

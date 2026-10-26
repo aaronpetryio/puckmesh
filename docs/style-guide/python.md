@@ -67,8 +67,8 @@ Use the same domain words as the dbt project: `season_id`, `game_id`, `endpoint`
 ## Configuration and secrets
 
 - Environment variables are read in one module (`extract/db.py` today, or a
-  `config.py`), each with its default, not scattered (`RAW_CATALOG` is currently read
-  in both `db.py` and `upload.py`).
+  `config.py`), each with its default, not scattered. The one exception is the
+  Databricks SDK, which reads `DATABRICKS_HOST` / `DATABRICKS_TOKEN` itself.
 - Every variable the code reads is listed in `.env.example` with a comment.
 - No secrets in code or in raw files. The HockeyTech key in `client.py` is public (it's in
   the league's own website); say so in a comment so nobody "fixes" it into a secret.

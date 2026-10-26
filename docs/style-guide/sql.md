@@ -37,8 +37,9 @@ select game_id, try_cast(event:team_id::string as int)  as scoring_team_id,
 
 - **Import CTEs at the top.** Every `{{ ref() }}` / `{{ source() }}` goes in a CTE named
   after the model it reads (`games`, `shots`), not inline in a later `join`.
-  Select only the columns you use, filtered as early as possible (dbt: "Limit the data
-  scanned by CTEs as much as possible").
+  `select *` when the model uses most of the columns; list them when it uses a few
+  (`seasons` → `season_id, season_type`). Filter as early as possible (dbt: "Limit the
+  data scanned by CTEs as much as possible").
 - **Functional CTEs do one thing**, and their names say what: `latest_fetch`,
   `attack_side`, `score_state`. Avoid names that don't describe the step (`renamed`
   for a CTE that parses height, `final`, `cte1`).
