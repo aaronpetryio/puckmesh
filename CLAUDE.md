@@ -27,7 +27,8 @@ Run dbt from `transform/` (the project-local `profiles.yml` is read from there):
 
 ```bash
 python -m extract run --mode daily          # fetch changed data, upload, load (what the schedule runs)
-python -m extract <endpoint> --all          # seasons | schedule | teams | roster | play-by-play
+python -m extract seasons                   # the season list
+python -m extract <endpoint> --all          # schedule | teams | roster | play-by-play (or --season <id>)
 cd transform
 dotenv -f ../.env run -- dbt deps           # first time, or after changing packages.yml
 dotenv -f ../.env run -- dbt build --select <model>+   # build a model and everything downstream, with tests
