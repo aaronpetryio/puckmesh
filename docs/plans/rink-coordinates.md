@@ -141,7 +141,7 @@ order by game_id, period
 
 - Remove `rink_net_x` and `rink_units_per_foot`.
 - Add `rink_length_ft: 200`, `rink_width_ft: 85` and `rink_goal_line_ft: 89`.
-- Keep `rink_length_units`, `rink_width_units`, `rink_center_x` and `rink_center_y`.
+- Keep `rink_length_units`, `rink_width_units` and `rink_center_x`. Remove `rink_center_y`, which nothing uses once y is converted from the rink width.
 - Rewrite the comment to name the convention and link [1] and [3], including that the grid is stylized and the feet are approximate.
 
 ### 2. `transform/models/intermediate/int_shots_enriched.sql`
@@ -170,10 +170,12 @@ order by game_id, period
   | Away shot, faceoff circle (the example above) | (466, 269) | away, goalie in net | 55.3, −33.7 | 47.6 ft / 45.0° |
   | The same spot from the other end | (134, 31) | home, goalie in net | 55.3, −33.7 | 47.6 ft / 45.0° |
   | From behind the net | (590, 120) | away, goalie in net | 96.7, 8.5 | 11.4 ft / 132.0° |
-  | Empty-net shot from its own half | (450, 150) | home, no goalie | −50.0, 0.0 | 139.0 ft / 0.0° |
   | Center ice | (300, 150) | away, goalie in net | 0.0, 0.0 | 89.0 ft / 0.0° |
+  | Empty-net shot from its own half, no other home shots that period (falls back to home-attacks-left) | (450, 149) | home, no goalie | −50.0, −0.3 | 139.0 ft / 0.1° |
+  | Swapped period: two home shots at a goalie on the right... | (500, 150), (520, 140) | home, goalie in net | 66.7, 0.0 and 73.3, 2.8 | 22.3 ft / 0.0° and 15.9 ft / 10.3° |
+  | ...so the home empty-net shot from the left half goes to the right net | (150, 150) | home, no goalie | −50.0, 0.0 | 139.0 ft / 0.0° |
 
-  The empty-net case assumes the home/away rule. If step 0 sends us to the per-period rule, its fixture needs other shots by the same team in that period.
+  The first empty-net case uses y = 149 rather than 150 to keep it off the exact center line.
 
 - **Data tests:**
   - Keep the range tests on `distance_ft` and `angle_deg`.
