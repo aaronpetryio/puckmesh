@@ -1,0 +1,6 @@
+# Formatting-only commits, skipped by `git blame` (GitHub's blame view reads this file;
+# locally: git config blame.ignoreRevsFile .git-blame-ignore-revs).
+# If the PR that added a commit is squash-merged, replace its SHA with the squashed one.
+
+# Apply sqlfluff layout and ruff format (formatting only)
+b00223d5b16fb095522c1234c2a4c853d40ef523
