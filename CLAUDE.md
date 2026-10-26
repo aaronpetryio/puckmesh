@@ -51,10 +51,3 @@ dotenv -f ../.env run -- dbt build          # everything
 - Python: plain functions and modules, docstrings on public functions, no frameworks. Match the existing code.
 - Commits: short imperative summary of the feature, e.g. "Add play-by-play: extraction, base model, per-event staging".
 
-## Gotchas
-
-- HockeyTech often returns HTTP 200 with an error payload; `parse_body` raises `HockeyTechError`. `statviewfeed` responses are JSONP-wrapped.
-- Raw holds one file per *change*, not per fetch. No new rows can just mean nothing changed (e.g. off-season), so there's no source freshness check.
-- The schedule's `shootout` flag misses some shootouts. Use `stg_pwhl__shootout_attempts` instead.
-- Rink coordinates are HockeyTech's 600×300 grid, not to scale. See `vars` in `dbt_project.yml`.
-- Databricks Free Edition: serverless only, a daily fair-usage quota, restricted outbound internet (which is why extraction runs outside Databricks).
