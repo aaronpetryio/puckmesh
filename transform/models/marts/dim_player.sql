@@ -1,12 +1,22 @@
--- One row per player who has appeared on a roster, with attributes from their most
--- recent roster entry. Built from rosters (not the API's player list), which leaves out
--- the empty duplicate player records the league's database contains.
-with roster as (
+-- Built from rosters, not the API's player list, which leaves out the empty duplicate
+-- player records the league's database contains.
+with roster_players as (
+    select * from {{ ref('stg_pwhl__roster_players') }}
+),
+
+seasons as (
     select
-        roster.*,
+        season_id,
+        start_date
+    from {{ ref('stg_pwhl__seasons') }}
+),
+
+roster as (
+    select
+        roster_players.*,
         seasons.start_date
-    from {{ ref('stg_pwhl__roster_players') }} as roster
-    inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
+    from roster_players
+    inner join seasons on roster_players.season_id = seasons.season_id
 ),
 
 latest as (
@@ -14,7 +24,7 @@ latest as (
     from roster
     -- A player traded mid-season has two rows in that season; team_id breaks the tie
     -- only so the pick is deterministic (attributes are the same person either way).
-    qualify row_number() over (partition by player_id order by start_date desc, team_id) = 1
+    qualify row_number() over (partition by player_id order by start_date desc, team_id asc) = 1
 ),
 
 career as (
@@ -48,4 +58,4 @@ select
     career.seasons_on_roster,
     career.teams_played_for
 from latest
-inner join career using (player_id)
+inner join career on latest.player_id = career.player_id

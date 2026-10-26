@@ -4,8 +4,6 @@ with events as (
     where event_type = 'goalie_change'
 )
 
--- One row per goalie change, including each team's starter at 0:00.
--- goalie_in null = net emptied for an extra attacker; goalie_out null = game start.
 select
     league_id,
     game_id,
@@ -16,8 +14,8 @@ select
     game_seconds,
 
     try_cast(event:team_id::string as int) as team_id,
-    try_cast(nullif(event:goalie_in_id::string, '') as int) as goalie_in_player_id,
-    try_cast(nullif(event:goalie_out_id::string, '') as int) as goalie_out_player_id,
+    try_cast(event:goalie_in_id::string as int) as goalie_in_player_id,
+    try_cast(event:goalie_out_id::string as int) as goalie_out_player_id,
 
     source_fetched_at
 from events

@@ -31,17 +31,20 @@ players as (
     where player:player_id is not null
 ),
 
-renamed as (
+heights_parsed as (
+    -- Height arrives as 5'7, 5'7", 5'7'', 5.07, ...: first digit is feet, next one or two
+    -- are inches. Blank or unparseable heights give null.
     select
-        season_id,
-        team_id,
-        fetched_at,
-        player,
-        nullif(player:height::string, '') as height_raw
+        *,
+        try_cast(
+            regexp_extract(player:height::string, '^([0-9])[^0-9]+([0-9]{1,2})', 1) as int
+        ) as height_feet_part,
+        try_cast(
+            regexp_extract(player:height::string, '^([0-9])[^0-9]+([0-9]{1,2})', 2) as int
+        ) as height_inches_part
     from players
 )
 
--- One row per player per team per season. A player traded mid-season has a row on each team.
 select
     'pwhl' as league_id,
     player:player_id::int as player_id,
@@ -68,14 +71,8 @@ select
     nullif(player:birthcntry::string, '') as birth_country,
     nullif(player:hometown::string, '') as hometown,
 
-    -- Height arrives as 5'7, 5'7", 5'7'', 5.07, ...: first digit is feet, next one or two are inches.
     -- Weight is not used: the API returns 0 or blank for every player.
-    case
-        when regexp_extract(height_raw, '^([0-9])[^0-9]+([0-9]{1,2})', 1) != ''
-            then
-                cast(regexp_extract(height_raw, '^([0-9])[^0-9]+([0-9]{1,2})', 1) as int) * 12
-                + cast(regexp_extract(height_raw, '^([0-9])[^0-9]+([0-9]{1,2})', 2) as int)
-    end as height_inches,
+    height_feet_part * 12 + height_inches_part as height_inches,
 
     player:rookie::int = 1 as is_rookie,
     nullif(nullif(player:status::string, ''), 'None') as roster_status,
@@ -83,4 +80,4 @@ select
     nullif(player:player_image::string, '') as headshot_url,
 
     fetched_at as source_fetched_at
-from renamed
+from heights_parsed

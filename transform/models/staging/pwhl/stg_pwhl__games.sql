@@ -43,7 +43,7 @@ select
     case when game:final::int = 1 then game:visiting_goal_count::int end as away_goals,
     game:overtime::int = 1 as went_to_overtime,
     game:shootout::int = 1 as went_to_shootout,
-    try_cast(nullif(game:attendance::string, '') as int) as attendance,
+    try_cast(game:attendance::string as int) as attendance,
 
     fetched_at as source_fetched_at
 from games

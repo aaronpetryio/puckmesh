@@ -41,8 +41,6 @@ timed as (
     from events
 )
 
--- One row per play-by-play event, in API order. Event-specific fields stay in `event`
--- (VARIANT); the stg_pwhl__<event type> models type them.
 select
     'pwhl' as league_id,
     game_id,
@@ -52,7 +50,7 @@ select
     period,
     period_seconds,
     -- Regulation periods are 20 minutes; overtime starts at 3600 whatever its length.
-    (period - 1) * 1200 + period_seconds as game_seconds,
+    (period - 1) * {{ var('regulation_period_seconds') }} + period_seconds as game_seconds,
     event,
     fetched_at as source_fetched_at
 from timed

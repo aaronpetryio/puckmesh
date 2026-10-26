@@ -4,7 +4,6 @@ with events as (
     where event_type = 'penalty'
 )
 
--- One row per penalty called.
 select
     league_id,
     game_id,
@@ -18,8 +17,8 @@ select
     try_cast(event:team_id::string as int) as penalized_team_id,
     event:home::int = 1 as is_home_team,
     -- Null for bench minors; served_by is who sat in the box.
-    try_cast(nullif(event:player_id::string, '') as int) as penalized_player_id,
-    try_cast(nullif(event:player_served::string, '') as int) as served_by_player_id,
+    try_cast(event:player_id::string as int) as penalized_player_id,
+    try_cast(event:player_served::string as int) as served_by_player_id,
     event:bench::int = 1 as is_bench_penalty,
 
     event:lang_penalty_description::string as infraction,

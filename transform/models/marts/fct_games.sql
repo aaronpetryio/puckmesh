@@ -1,11 +1,29 @@
--- One row per game, played or scheduled, with teams as named that season, the result,
--- and shot totals from play-by-play.
 with games as (
     select * from {{ ref('stg_pwhl__games') }}
 ),
 
+seasons as (
+    select
+        season_id,
+        season_type
+    from {{ ref('stg_pwhl__seasons') }}
+),
+
 teams as (
-    select * from {{ ref('stg_pwhl__teams') }}
+    select
+        team_id,
+        season_id,
+        team_code,
+        team_name
+    from {{ ref('stg_pwhl__teams') }}
+),
+
+shootout_attempts as (
+    select * from {{ ref('stg_pwhl__shootout_attempts') }}
+),
+
+shots as (
+    select * from {{ ref('stg_pwhl__shots') }}
 ),
 
 shootouts as (
@@ -13,7 +31,7 @@ shootouts as (
     select
         game_id,
         max(case when is_winning_goal then shooting_team_id end) as shootout_winning_team_id
-    from {{ ref('stg_pwhl__shootout_attempts') }}
+    from shootout_attempts
     group by game_id
 ),
 
@@ -23,8 +41,8 @@ shot_totals as (
         shooting_team_id,
         count_if(shot_result in ('on_net', 'goal')) as shots_on_goal,
         count(*) as shot_attempts
-    from {{ ref('stg_pwhl__shots') }}
-    group by all
+    from shots
+    group by game_id, shooting_team_id
 )
 
 select
@@ -66,13 +84,17 @@ select
     home_shots.shot_attempts as home_shot_attempts,
     away_shots.shot_attempts as away_shot_attempts
 from games
-inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
+inner join seasons on games.season_id = seasons.season_id
 left join teams as home
-    on home.team_id = games.home_team_id and home.season_id = games.season_id
+    on games.home_team_id = home.team_id
+    and games.season_id = home.season_id
 left join teams as away
-    on away.team_id = games.away_team_id and away.season_id = games.season_id
-left join shootouts using (game_id)
+    on games.away_team_id = away.team_id
+    and games.season_id = away.season_id
+left join shootouts on games.game_id = shootouts.game_id
 left join shot_totals as home_shots
-    on home_shots.game_id = games.game_id and home_shots.shooting_team_id = games.home_team_id
+    on games.game_id = home_shots.game_id
+    and games.home_team_id = home_shots.shooting_team_id
 left join shot_totals as away_shots
-    on away_shots.game_id = games.game_id and away_shots.shooting_team_id = games.away_team_id
+    on games.game_id = away_shots.game_id
+    and games.away_team_id = away_shots.shooting_team_id

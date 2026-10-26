@@ -4,7 +4,6 @@ with events as (
     where event_type = 'hit'
 )
 
--- One row per hit. Not recorded for every game.
 select
     league_id,
     game_id,

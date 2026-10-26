@@ -21,8 +21,6 @@ teams as (
         lateral variant_explode(latest_fetch.response:SiteKit.Teamsbyseason) as t
 )
 
--- One row per team per season: names, codes, and logos change between seasons
--- (PWHL Boston -> Boston Fleet, MON -> MTL), so team_id alone is not a row.
 select
     'pwhl' as league_id,
     team:id::int as team_id,

@@ -4,7 +4,6 @@ with events as (
     where event_type = 'faceoff'
 )
 
--- One row per faceoff.
 select
     league_id,
     game_id,

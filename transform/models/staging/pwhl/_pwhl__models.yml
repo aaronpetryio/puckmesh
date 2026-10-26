@@ -51,7 +51,8 @@ models:
   - name: stg_pwhl__teams
     description: >
       One row per team per season, from the latest teams fetch for each season. Names,
-      codes, and logos change between seasons, so (team_id, season_id) is the key.
+      codes, and logos change between seasons (PWHL Boston -> Boston Fleet, MON -> MTL),
+      so (team_id, season_id) is the key.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:

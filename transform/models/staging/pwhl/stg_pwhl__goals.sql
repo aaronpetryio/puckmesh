@@ -4,7 +4,6 @@ with events as (
     where event_type = 'goal'
 )
 
--- One row per goal, with assists, situation flags, and who was on the ice.
 select
     league_id,
     game_id,
@@ -18,8 +17,8 @@ select
     try_cast(event:team_id::string as int) as scoring_team_id,
     event:home::int = 1 as is_home_team,
     try_cast(event:goal_player_id::string as int) as scorer_player_id,
-    try_cast(nullif(event:assist1_player_id::string, '') as int) as primary_assist_player_id,
-    try_cast(nullif(event:assist2_player_id::string, '') as int) as secondary_assist_player_id,
+    try_cast(event:assist1_player_id::string as int) as primary_assist_player_id,
+    try_cast(event:assist2_player_id::string as int) as secondary_assist_player_id,
 
     event:power_play::int = 1 as is_power_play,
     event:short_handed::int = 1 as is_short_handed,

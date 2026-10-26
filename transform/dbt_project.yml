@@ -15,9 +15,17 @@ vars:
   # HockeyTech's shot grid is 600 x 300 and not drawn to scale. Goals cluster at x ~50
   # and ~550, so the goal lines are ~500 units apart; real goal lines are 178 ft apart.
   # Approximate; revisit when validating the xG model.
+  rink_length_units: 600     # x runs 0-600 along the rink
+  rink_width_units: 300      # y runs 0-300 across it
   rink_net_x: 550            # attacking net after normalizing every shot to attack right
+  rink_center_x: 300
   rink_center_y: 150
   rink_units_per_foot: 2.81  # 500 units / 178 ft
+
+  regulation_period_seconds: 1200   # 20 minutes; overtime counts from 3 x 1200
+
+  # A shot this soon after the same team's previous unblocked shot counts as a rebound.
+  rebound_window_seconds: 3
 
 # Bronze is the raw catalog (raw.<league>.<endpoint>), loaded by extract/load.py
 # and declared as dbt sources. dbt builds silver and gold only.
