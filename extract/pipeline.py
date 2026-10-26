@@ -6,15 +6,21 @@ full:  everything in every season. Catches changes to historical data (correctio
        new fields added to old games) that a daily run never looks at.
 """
 
+import logging
 from collections import Counter
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 from extract import raw
-from extract.client import HockeyTechClient
+from extract.client import HockeyTechClient, Json
 from extract.endpoints import play_by_play, roster, schedule, seasons, teams
 from extract.load import load
 from extract.state import State
 from extract.upload import upload
+
+log = logging.getLogger(__name__)
+
+Mode = Literal["daily", "full"]
 
 # A season is "active" from a month before it starts until two weeks after it ends.
 ACTIVE_BEFORE = timedelta(days=30)
@@ -23,13 +29,13 @@ ACTIVE_AFTER = timedelta(days=14)
 RECENT_GAMES = timedelta(days=3)
 
 
-def run(client: HockeyTechClient, mode: str, today: date | None = None) -> None:
-    today = today or date.today()
+def run(client: HockeyTechClient, mode: Mode, today: date | None = None) -> None:
+    today = today or datetime.now(UTC).date()
     league = client.league
     state = State.load(league)
     fetched, saved = Counter(), Counter()
 
-    def save(endpoint, response, params, **partitions):
+    def save(endpoint: str, response: Json, params: dict, **partitions: int) -> None:
         fetched[endpoint] += 1
         if raw.save(league, endpoint, response, params, state, **partitions):
             saved[endpoint] += 1
@@ -37,7 +43,7 @@ def run(client: HockeyTechClient, mode: str, today: date | None = None) -> None:
     seasons_response, params = seasons.fetch(client)
     save(seasons.NAME, seasons_response, params)
 
-    for season in seasons_response["SiteKit"]["Seasons"]:
+    for season in seasons.seasons(seasons_response):
         season_id = int(season["season_id"])
         if mode == "daily" and not _is_active(season, today):
             continue
@@ -52,9 +58,7 @@ def run(client: HockeyTechClient, mode: str, today: date | None = None) -> None:
             save(roster.NAME, response, params, season_id=season_id, team_id=team_id)
 
         recent_cutoff = (today - RECENT_GAMES).isoformat()
-        for game in schedule_response["SiteKit"]["Schedule"]:
-            if game["final"] != "1":
-                continue
+        for game in schedule.final_games(schedule_response):
             game_id = int(game["game_id"])
             partitions = {"season_id": season_id, "game_id": game_id}
             is_new = not state.has(play_by_play.NAME, partitions)
@@ -63,23 +67,29 @@ def run(client: HockeyTechClient, mode: str, today: date | None = None) -> None:
                 response, params = play_by_play.fetch(client, game_id)
                 save(play_by_play.NAME, response, params, **partitions)
 
-    print(
-        f"{mode} run: fetched {sum(fetched.values())} responses, {sum(saved.values())} new or changed"
+    log.info(
+        "%s run: fetched %d responses, %d new or changed",
+        mode,
+        sum(fetched.values()),
+        sum(saved.values()),
     )
     for endpoint in sorted(fetched):
-        print(
-            f"  {endpoint:14} fetched {fetched[endpoint]:4}  saved {saved[endpoint]:4}"
+        log.info(
+            "  %-14s fetched %4d  saved %4d",
+            endpoint,
+            fetched[endpoint],
+            saved[endpoint],
         )
 
     if sum(saved.values()):
         uploaded, skipped = upload(league)
-        print(f"{uploaded} uploaded, {skipped} already in the Volume")
+        log.info("%d uploaded, %d already in the Volume", uploaded, skipped)
         for endpoint, rows in load(league).items():
             if rows:
-                print(f"  loaded {rows} rows into {endpoint}")
+                log.info("  loaded %d rows into %s", rows, endpoint)
 
 
-def _is_active(season: dict, today: date) -> bool:
+def _is_active(season: Json, today: date) -> bool:
     start = date.fromisoformat(season["start_date"])
     end = date.fromisoformat(season["end_date"])
     return start - ACTIVE_BEFORE <= today <= end + ACTIVE_AFTER

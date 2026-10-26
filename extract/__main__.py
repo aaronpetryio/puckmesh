@@ -1,23 +1,26 @@
 """Command line entry point.
 
-python -m extract seasons
-python -m extract schedule --season 8 [--season 9 ...]
-python -m extract schedule --all
-python -m extract teams --all
-python -m extract roster --all
-python -m extract play-by-play --all [--new-only]
-python -m extract upload
-python -m extract load
-python -m extract run --mode daily|full     (what the scheduled job runs)
-python -m extract backfill-hashes           (one-time migration)
+Usage:
+    python -m extract seasons
+    python -m extract schedule --season 8 [--season 9 ...]
+    python -m extract schedule --all
+    python -m extract teams --all
+    python -m extract roster --all
+    python -m extract play-by-play --all [--new-only]
+    python -m extract upload
+    python -m extract load
+    python -m extract run --mode daily|full     (what the scheduled job runs)
+    python -m extract backfill-hashes           (one-time migration)
 """
 
 import argparse
+import logging
 from functools import cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from extract import raw
+from extract import load, pipeline, raw, upload
 from extract.client import LEAGUES, HockeyTechClient
 from extract.endpoints import play_by_play, roster, schedule, seasons, teams
 from extract.state import State
@@ -29,130 +32,103 @@ def _state(league: str) -> State:
     return State.load(league)
 
 
-def _saved(path) -> str:
+def _saved(path: Path | None) -> str:
     return str(path) if path else "unchanged, not saved"
 
 
-def _season_ids(client: HockeyTechClient, args) -> list[int]:
+def _season_ids(client: HockeyTechClient, args: argparse.Namespace) -> list[int]:
     if args.all:
         response, _ = seasons.fetch(client)
         return seasons.season_ids(response)
     return args.season
 
 
-def cmd_seasons(client: HockeyTechClient, args) -> None:
+def cmd_seasons(client: HockeyTechClient, args: argparse.Namespace) -> None:
     response, params = seasons.fetch(client)
-    path = raw.save(
-        client.league, seasons.NAME, response, params, _state(client.league)
-    )
+    state = _state(client.league)
+    path = raw.save(client.league, seasons.NAME, response, params, state)
     print(f"{len(seasons.season_ids(response))} seasons -> {_saved(path)}")
 
 
-def cmd_schedule(client: HockeyTechClient, args) -> None:
+def cmd_schedule(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    state = _state(client.league)
     for season_id in _season_ids(client, args):
         response, params = schedule.fetch(client, season_id)
         path = raw.save(
-            client.league,
-            schedule.NAME,
-            response,
-            params,
-            _state(client.league),
-            season_id=season_id,
+            client.league, schedule.NAME, response, params, state, season_id=season_id
         )
-        print(
-            f"season {season_id}: {len(response['SiteKit']['Schedule'])} games -> {_saved(path)}"
-        )
+        games = len(schedule.games(response))
+        print(f"season {season_id}: {games} games -> {_saved(path)}")
 
 
-def cmd_teams(client: HockeyTechClient, args) -> None:
+def cmd_teams(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    state = _state(client.league)
     for season_id in _season_ids(client, args):
         response, params = teams.fetch(client, season_id)
         path = raw.save(
-            client.league,
-            teams.NAME,
-            response,
-            params,
-            _state(client.league),
-            season_id=season_id,
+            client.league, teams.NAME, response, params, state, season_id=season_id
         )
-        print(
-            f"season {season_id}: {len(teams.team_ids(response))} teams -> {_saved(path)}"
-        )
+        count = len(teams.team_ids(response))
+        print(f"season {season_id}: {count} teams -> {_saved(path)}")
 
 
-def cmd_roster(client: HockeyTechClient, args) -> None:
+def cmd_roster(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    state = _state(client.league)
     for season_id in _season_ids(client, args):
         # The season's team list tells us which rosters exist.
         teams_response, _ = teams.fetch(client, season_id)
         for team_id in teams.team_ids(teams_response):
             response, params = roster.fetch(client, season_id, team_id)
+            partitions = {"season_id": season_id, "team_id": team_id}
             path = raw.save(
-                client.league,
-                roster.NAME,
-                response,
-                params,
-                _state(client.league),
-                season_id=season_id,
-                team_id=team_id,
+                client.league, roster.NAME, response, params, state, **partitions
             )
-            print(
-                f"season {season_id} team {team_id}: {len(response['SiteKit']['Roster'])} entries -> {_saved(path)}"
-            )
+            entries = len(roster.entries(response))
+            label = f"season {season_id} team {team_id}"
+            print(f"{label}: {entries} entries -> {_saved(path)}")
 
 
-def cmd_play_by_play(client: HockeyTechClient, args) -> None:
+def cmd_play_by_play(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    state = _state(client.league)
     for season_id in _season_ids(client, args):
         # The season's schedule tells us which games are final.
         schedule_response, _ = schedule.fetch(client, season_id)
         for game_id in play_by_play.final_game_ids(schedule_response):
             partitions = {"season_id": season_id, "game_id": game_id}
-            if args.new_only and _state(client.league).has(
-                play_by_play.NAME, partitions
-            ):
+            if args.new_only and state.has(play_by_play.NAME, partitions):
                 continue
             response, params = play_by_play.fetch(client, game_id)
             path = raw.save(
-                client.league,
-                play_by_play.NAME,
-                response,
-                params,
-                _state(client.league),
-                **partitions,
+                client.league, play_by_play.NAME, response, params, state, **partitions
             )
+            events = len(play_by_play.events(response))
             print(
-                f"season {season_id} game {game_id}: {len(response['GC']['Pxpverbose'])} events -> {_saved(path)}"
+                f"season {season_id} game {game_id}: {events} events -> {_saved(path)}"
             )
 
 
-def cmd_upload(client: HockeyTechClient, args) -> None:
-    from extract.upload import upload
-
-    uploaded, skipped = upload(client.league)
+def cmd_upload(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    uploaded, skipped = upload.upload(client.league)
     print(f"{uploaded} uploaded, {skipped} already in the Volume")
 
 
-def cmd_load(client: HockeyTechClient, args) -> None:
-    from extract.load import load
-
-    for endpoint, rows in load(client.league).items():
+def cmd_load(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    for endpoint, rows in load.load(client.league).items():
         print(f"{endpoint}: {rows} new rows")
 
 
-def cmd_run(client: HockeyTechClient, args) -> None:
-    from extract.pipeline import run
-
-    run(client, args.mode)
+def cmd_run(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    pipeline.run(client, args.mode)
 
 
-def cmd_backfill_hashes(client: HockeyTechClient, args) -> None:
-    from extract.load import backfill_hashes
-
-    for endpoint, rows in backfill_hashes(client.league).items():
+def cmd_backfill_hashes(client: HockeyTechClient, args: argparse.Namespace) -> None:
+    for endpoint, rows in load.backfill_hashes(client.league).items():
         print(f"{endpoint}: {rows} rows given a content_hash")
 
 
 def main() -> None:
     load_dotenv()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="python -m extract")
     parser.add_argument("--league", default="pwhl", choices=sorted(LEAGUES))
     sub = parser.add_subparsers(dest="command", required=True)
