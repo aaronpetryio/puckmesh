@@ -102,7 +102,7 @@ Everything runs from a laptop. No scheduling, no website.
 5. `dbt build` from the laptop. Done when games show up as a typed, tested table.
 
 **Phase 1 — Full PWHL backfill**
-All seasons since the inaugural one (season_id=1). Endpoints: schedule, standings, rosters, skater/goalie stats, play-by-play (needed for xG). Core marts: `dim_player`, `dim_team`, `fct_games`, `fct_shots`, `fct_player_game`.
+All seasons since the inaugural one (season_id=1). Endpoints: schedule, standings, rosters, skater/goalie stats, play-by-play (needed for xG). Core marts: `dim_players`, `dim_teams`, `fct_games`, `fct_shots`, `fct_player_game`.
 
 **Phase 2 — Daily automation**
 GitHub Actions cron (morning after games) runs the extractor, uploads to the Volume, then triggers a Databricks Workflow: `dbt build` (dbt task) → scoring notebooks → Parquet export.
@@ -125,7 +125,7 @@ NCAA women's, Worlds, Olympics. Likely different sources and scrapers; only the 
 - **One dbt target at a time.** Databricks now. Swapping to Snowflake, DuckDB, or Postgres means changing the adapter and fixing staging-layer SQL, not rewriting the project.
 - **The website reads files, not the warehouse.** Hosting cost stays near zero, and the warehouse can change without touching the site.
 - **League-agnostic schema.** Per-league staging models (`stg_pwhl__*`, `stg_ncaa__*`) union into canonical intermediate models with a `league_id`.
-- **One player, one ID.** A player crosswalk (`dim_player` + xref seed) links the same person across NCAA → PWHL → international.
+- **One player, one ID.** A player crosswalk (`dim_players` + xref seed) links the same person across NCAA → PWHL → international.
 - **Automate last.** Get it working by hand, then schedule it.
 
 ---

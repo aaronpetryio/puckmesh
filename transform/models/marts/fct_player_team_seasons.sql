@@ -1,4 +1,23 @@
--- One row per player per team per season they were rostered: the career-history table.
+with roster as (
+    select * from {{ ref('stg_pwhl__roster_players') }}
+),
+
+seasons as (
+    select
+        season_id,
+        season_type
+    from {{ ref('stg_pwhl__seasons') }}
+),
+
+teams as (
+    select
+        team_id,
+        season_id,
+        team_code,
+        team_name
+    from {{ ref('stg_pwhl__teams') }}
+)
+
 select
     roster.league_id,
     roster.player_id,
@@ -12,6 +31,8 @@ select
     roster.position_group,
     roster.is_rookie,
     roster.roster_status
-from {{ ref('stg_pwhl__roster_players') }} as roster
-inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
-inner join {{ ref('stg_pwhl__teams') }} as teams using (team_id, season_id)
+from roster
+inner join seasons on roster.season_id = seasons.season_id
+inner join teams
+    on roster.team_id = teams.team_id
+    and roster.season_id = teams.season_id

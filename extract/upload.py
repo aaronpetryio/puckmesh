@@ -1,22 +1,19 @@
-"""Copy local raw files to the Unity Catalog Volume: /Volumes/<catalog>/<league>/<volume>/...
+"""Copy local raw files to the Unity Catalog Volume.
 
+Destination: /Volumes/<catalog>/<league>/<volume>/, mirroring data/raw/<league>/.
 Files already in the Volume are skipped. Raw files are immutable (each has a
 unique fetched_at name), so existence is enough to know it's been uploaded.
 """
 
-import os
-from pathlib import Path
+import logging
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import NotFound
 
+from extract import db
 from extract.raw import RAW_ROOT
 
-
-def volume_root(league: str) -> str:
-    catalog = os.environ.get("RAW_CATALOG", "raw")
-    volume = os.environ.get("RAW_VOLUME", "landing")
-    return f"/Volumes/{catalog}/{league}/{volume}"
+log = logging.getLogger(__name__)
 
 
 def upload(league: str) -> tuple[int, int]:
@@ -24,7 +21,7 @@ def upload(league: str) -> tuple[int, int]:
     # Reads DATABRICKS_HOST and DATABRICKS_TOKEN from the environment.
     w = WorkspaceClient()
     local_root = RAW_ROOT / league
-    remote_root = volume_root(league)
+    remote_root = db.volume_root(league)
 
     uploaded = skipped = 0
     for path in sorted(local_root.rglob("*.json")):
@@ -35,7 +32,7 @@ def upload(league: str) -> tuple[int, int]:
         with path.open("rb") as f:
             w.files.upload(remote, f, overwrite=False)
         uploaded += 1
-        print(f"uploaded {remote}")
+        log.info("uploaded %s", remote)
     return uploaded, skipped
 
 

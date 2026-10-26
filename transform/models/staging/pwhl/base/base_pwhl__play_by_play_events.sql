@@ -1,9 +1,9 @@
 with source as (
     select
-        payload:_meta.season_id::int        as season_id,
-        payload:_meta.game_id::int          as game_id,
+        payload:_meta.season_id::int as season_id,
+        payload:_meta.game_id::int as game_id,
         payload:_meta.fetched_at::timestamp as fetched_at,
-        payload:response                    as response
+        payload:response as response
     from {{ source('pwhl', 'play_by_play') }}
 ),
 
@@ -18,7 +18,7 @@ events as (
         latest_fetch.season_id,
         latest_fetch.game_id,
         latest_fetch.fetched_at,
-        e.pos   as event_index,
+        e.pos as event_index,
         e.value as event
     from latest_fetch,
         lateral variant_explode(latest_fetch.response:GC.Pxpverbose) as e
@@ -41,18 +41,16 @@ timed as (
     from events
 )
 
--- One row per play-by-play event, in API order. Event-specific fields stay in `event`
--- (VARIANT); the stg_pwhl__<event type> models type them.
 select
-    'pwhl'                                  as league_id,
+    'pwhl' as league_id,
     game_id,
     season_id,
     event_index,
-    event:event::string                     as event_type,
+    event:event::string as event_type,
     period,
     period_seconds,
     -- Regulation periods are 20 minutes; overtime starts at 3600 whatever its length.
-    (period - 1) * 1200 + period_seconds    as game_seconds,
+    (period - 1) * {{ var('regulation_period_seconds') }} + period_seconds as game_seconds,
     event,
-    fetched_at                              as source_fetched_at
+    fetched_at as source_fetched_at
 from timed
