@@ -1,0 +1,43 @@
+# Tool configuration only for now; dependencies are still in requirements.txt.
+# The human-readable rules are in docs/style-guide/python.md.
+
+[tool.ruff]
+# Ruff's default (Black's), inside PEP 8's "up to 99 by team agreement".
+line-length = 88
+target-version = "py311"   # matches .github/workflows/pipeline.yml
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle (PEP 8)
+    "F",        # pyflakes: unused imports/variables, undefined names
+    "I",        # isort: import order
+    "N",        # pep8-naming
+    "D",        # pydocstyle (PEP 257), Google convention below
+    "UP",       # pyupgrade: modern syntax for target-version
+    "B",        # bugbear: likely bugs
+    "S",        # bandit: security (S608 = SQL built from strings)
+    "SIM",      # simplifications
+    "C4",       # comprehensions
+    "PTH",      # pathlib over os.path
+    "RUF",      # ruff-specific
+    "T20",      # print(): CLI output only, see per-file-ignores
+    "ANN001",   # annotate function arguments
+    "ANN201",   # annotate public function return types
+]
+ignore = [
+    # Docstrings are required on modules, not on every function: a function whose
+    # name and types say it all doesn't need one (style guide, "Docstrings").
+    "D102", "D103", "D105", "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# The command line entry point is where printing to the terminal belongs.
+"extract/__main__.py" = ["T20"]
+"tests/**" = ["S101", "D", "ANN"]
+
+[tool.ruff.format]
+# Ruff's formatter is Black-compatible (dbt Labs recommends Black + Ruff).
+docstring-code-format = true
