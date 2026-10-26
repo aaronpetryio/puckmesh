@@ -16,13 +16,20 @@ templater = jinja
 max_line_length = 100
 indent_unit = space
 # structure.column_order: fights dbt's "group columns by type" ordering.
-exclude_rules = structure.column_order
+# ambiguous.column_count: flags `select cte.*`, which intermediate models use on purpose
+# to carry every staging column through.
+exclude_rules = structure.column_order, ambiguous.column_count
 
 [sqlfluff:templater:jinja]
 apply_dbt_builtins = True
 
 [sqlfluff:indentation]
 tab_space_size = 4
+# Keep the first join condition on the `on` line, as in dbt's examples:
+#     left join goals
+#         on goals.game_id = shots.game_id
+#         and goals.event_index < shots.event_index
+indented_on_contents = False
 
 [sqlfluff:layout:type:comma]
 spacing_before = touch
@@ -45,6 +52,10 @@ aliasing = explicit
 
 [sqlfluff:rules:aliasing.column]
 aliasing = explicit
+
+[sqlfluff:rules:references.keywords]
+# `position` is the hockey term and isn't reserved in Databricks SQL.
+ignore_words = position
 
 [sqlfluff:rules:convention.casting_style]
 # `::` is already required for VARIANT paths (payload:_meta.season_id::int).

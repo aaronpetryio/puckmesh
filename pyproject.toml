@@ -41,3 +41,6 @@ convention = "google"
 [tool.ruff.format]
 # Ruff's formatter is Black-compatible (dbt Labs recommends Black + Ruff).
 docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
