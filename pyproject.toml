@@ -38,9 +38,9 @@ convention = "google"
 "extract/__main__.py" = ["T20"]
 "tests/**" = ["S101", "D", "ANN"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.ruff.format]
 # Ruff's formatter is Black-compatible (dbt Labs recommends Black + Ruff).
 docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
