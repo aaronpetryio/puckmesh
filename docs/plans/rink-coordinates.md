@@ -1,6 +1,6 @@
 # Plan: adopt the standard PWHL rink-coordinate convention
 
-Status: draft, awaiting review. Separate from the xG work.
+Status: implemented on this branch; awaiting a local `dbt build`. Separate from the xG work.
 
 ## Problem
 
@@ -122,6 +122,15 @@ where share_left < 0.5
 order by game_id, period
 ```
 
+**Results (run against dev):**
+- The rule holds almost everywhere. Most rink/season/period groups are at 0.95–1.0. Groups just under 1.0 are real shots from beyond center ice.
+- Query 2 found 20 reversed game-periods, roughly 1.5% of them, matching the "~1.6% mixed" note in `int_shots_enriched`. Nearly all are at 0.0–0.2: whole periods recorded with the ends swapped, not stray shots.
+- They cluster in the first season (games 3, 9, 23, 35, 40, 43, 71, 76) and at what look like one-off venues. In some games, periods 1 and 3 are swapped but period 2 isn't, as if the scorer recorded the physical ends.
+- **The flip is in the source data.** The league's own shot chart for game 3, period 1 shows all 10 home shots at the right end, matching query 2's 10.
+- **Bonus:** that chart draws a to-scale 200 × 85 ft rink (about 8.2 px/ft both ways, with goal lines, blue lines and dots at regulation spots). That supports stretching the 600 × 300 grid over the full rink.
+
+**Decision:** the rule fails in whole periods, so empty-net shots use the per-game-period rule below. The 99 ft check starts as a warning.
+
 **What we do with the answer:**
 - **If the rule holds everywhere:** query 1 near 1.0 for every rink, season and period, and query 2 empty or a few one-offs. Then empty-net shots use home → −89, away → +89, as fastRhockey does.
 - **If it fails somewhere** (a rink, a season, or whole periods): empty-net shots use the side the same team attacked in that game-period, taken from its shots with a goalie in net. That's today's `attack_side` logic, kept only for this case. Fall back to home/away when there aren't any.
@@ -199,7 +208,7 @@ order by game_id, period
 
 ## Open questions
 
-1. Is the 99 ft maximum for shots with a goalie in net right, or should it warn instead of fail at first?
+None. The 99 ft check is a warning for now; make it an error once a few builds pass clean.
 
 ## Sources
 

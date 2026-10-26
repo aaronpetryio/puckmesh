@@ -36,8 +36,8 @@ select
 
     shots.x_location,
     shots.y_location,
-    shots.x_normalized,
-    shots.y_normalized,
+    shots.x_ft,
+    shots.y_ft,
     shots.distance_ft,
     shots.angle_deg,
 
