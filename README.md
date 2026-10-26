@@ -151,7 +151,7 @@ NCAA women's, Worlds, Olympics. Likely different sources and scrapers; only the 
 ├── ml/                    # Databricks notebooks: xG, ratings, predictions
 ├── export/                # gold → Parquet for the website
 ├── app/                   # website (later)
-└── .github/workflows/     # daily pipeline (Phase 2)
+└── .github/workflows/     # pipeline.yml (scheduled runs), ci.yml (pull request checks)
 ```
 
 ---

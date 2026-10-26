@@ -38,7 +38,7 @@ dotenv -f ../.env run -- dbt build          # everything
 Checks that need no warehouse, from the repo root:
 
 ```bash
-pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (what CI will run)
+pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (CI's lint job)
 python -m pytest                            # extract/ unit tests
 ```
 

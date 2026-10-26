@@ -1,0 +1,4 @@
+# Tools for checking changes, locally and in CI (.github/workflows/ci.yml).
+# The linters themselves are pinned per hook in .pre-commit-config.yaml.
+pre-commit==4.7.0
+pytest==9.1.1

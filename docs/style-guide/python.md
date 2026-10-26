@@ -105,7 +105,8 @@ interpolate only backtick-quoted identifiers from config.
   and commit a lockfile (`uv lock` or `pip-compile`) so CI installs exactly what you
   tested. `requirements.txt` with only lower bounds means any release can change a
   scheduled run.
-- Keep dev tools (ruff, pytest, sqlfluff, pre-commit) in a separate dev group.
+- Keep dev tools in `requirements-dev.txt` (pre-commit, pytest), separate from what the
+  pipeline needs.
 
 ## Not done yet
 
