@@ -2,12 +2,33 @@ version: 2
 
 models:
   - name: dim_teams
-    description: One row per team (placeholders excluded), with its most recent name, code, and logo.
+    description: >
+      One row per team (placeholders excluded), with its most recent name, code, and logo.
     columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
       - name: team_id
+        description: "{{ doc('team_id') }}"
         data_tests: [unique, not_null]
+      - name: team_code
+        description: Most recent team code.
       - name: team_name
+        description: Most recent team name.
         data_tests: [not_null]
+      - name: city
+        description: Most recent city. Null when the API leaves it blank.
+      - name: nickname
+        description: Most recent nickname. Null when the API leaves it blank.
+      - name: conference_name
+        description: Most recent conference. HockeyTech calls conferences "divisions".
+      - name: logo_url
+        description: Most recent logo.
+      - name: first_season_id
+        description: "{{ doc('first_season_id') }}"
+      - name: last_season_id
+        description: "{{ doc('last_season_id') }}"
+      - name: seasons_listed
+        description: Number of seasons the team appears in the league's team list.
 
   - name: dim_players
     description: >
@@ -21,50 +42,144 @@ models:
           config:
             severity: warn
     columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
       - name: player_id
+        description: "{{ doc('player_id') }}"
         data_tests: [unique, not_null]
+      - name: first_name
+        description: Most recent first name.
+      - name: last_name
+        description: Most recent last name.
       - name: full_name
+        description: Most recent full name, as the API formats it.
         data_tests: [not_null]
+      - name: position
+        description: "{{ doc('position') }}"
+      - name: position_group
+        description: "{{ doc('position_group') }}"
+      - name: shoots
+        description: Handedness as the API reports it. Null when blank.
+      - name: birth_date
+        description: Null when blank or not a valid date.
+      - name: birth_city
+        description: Null when blank.
+      - name: birth_region
+        description: Province or state.
+      - name: birth_country
+        description: Country as the API reports it. Null when blank.
+      - name: height_inches
+        description: Parsed from the API's free-text height. Null when blank or unparseable.
+      - name: headshot_url
+        description: Most recent headshot. Null when blank.
+      - name: first_season_id
+        description: "{{ doc('first_season_id') }}"
+      - name: last_season_id
+        description: "{{ doc('last_season_id') }}"
+      - name: seasons_on_roster
+        description: >
+          Number of seasons on any roster. Preseason, regular season, and playoffs count
+          separately.
+      - name: teams_played_for
+        description: Number of different teams rostered on.
 
   - name: fct_player_team_seasons
-    description: One row per player per team per season rostered. A mid-season trade gives two rows.
+    description: >
+      One row per player per team per season rostered. A mid-season trade gives two rows.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [player_id, team_id, season_id]
     columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
       - name: player_id
+        description: "{{ doc('player_id') }}"
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_players')
                 field: player_id
       - name: team_id
+        description: "{{ doc('team_id') }}"
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_teams')
                 field: team_id
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+      - name: season_type
+        description: "{{ doc('season_type') }}"
+      - name: team_code
+        description: "{{ doc('team_code') }}"
+      - name: team_name
+        description: "{{ doc('team_name') }}"
+      - name: jersey_number
+        description: Jersey number on that team that season.
+      - name: position
+        description: "{{ doc('position') }}"
+      - name: position_group
+        description: "{{ doc('position_group') }}"
+      - name: is_rookie
+        description: The league's rookie flag for that season.
+      - name: roster_status
+        description: Roster status as the API reports it. Null when blank.
 
   - name: fct_games
     description: >
       One row per game, played or scheduled. Team names are as of that season. Shootouts
       come from shootout attempts, not the schedule's unreliable flag.
     columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
       - name: game_id
+        description: "{{ doc('game_id') }}"
         data_tests: [unique, not_null]
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+      - name: season_type
+        description: "{{ doc('season_type') }}"
+      - name: game_date
+        description: Date played, as the schedule lists it.
+      - name: scheduled_start_at
+        description: Scheduled start, from the schedule's ISO 8601 time.
+      - name: attendance
+        description: Null when not reported.
+      - name: is_final
+        description: The game has been played and its result is final.
       - name: home_team_id
+        description: "{{ doc('team_id') }}"
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_teams')
                 field: team_id
+      - name: home_team_code
+        description: "{{ doc('team_code') }}"
+      - name: home_team_name
+        description: "{{ doc('team_name') }}"
       - name: away_team_id
+        description: "{{ doc('team_id') }}"
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_teams')
                 field: team_id
+      - name: away_team_code
+        description: "{{ doc('team_code') }}"
+      - name: away_team_name
+        description: "{{ doc('team_name') }}"
+      - name: home_goals
+        description: Final score. Null until final. Includes the +1 for a shootout win.
+      - name: away_goals
+        description: Final score. Null until final. Includes the +1 for a shootout win.
+      - name: winning_team_id
+        description: Null until final.
+        data_tests:
+          - not_null:
+              config:
+                where: is_final
       - name: decision
         description: regulation, overtime, or shootout. Null until final.
         data_tests:
@@ -74,19 +189,32 @@ models:
           - not_null:
               config:
                 where: is_final
-      - name: winning_team_id
-        data_tests:
-          - not_null:
-              config:
-                where: is_final
+      - name: has_overtime
+        description: The schedule's overtime flag.
+      - name: has_shootout
+        description: True when play-by-play has shootout attempts for the game.
       - name: shootout_winning_team_id
-        description: Must agree with the final score when there was a shootout.
+        description: >
+          Team that scored the shootout winner. Null without a shootout. Must agree with
+          the final score.
         data_tests:
           - dbt_utils.expression_is_true:
               arguments:
                 expression: "= winning_team_id"
               config:
                 where: has_shootout
+      - name: home_shots_on_goal
+        description: >
+          Shots on goal (on net plus goals) from play-by-play. Null when the game has no
+          play-by-play or the team recorded no shot attempts.
+      - name: away_shots_on_goal
+        description: Same as home_shots_on_goal, for the away team.
+      - name: home_shot_attempts
+        description: >
+          Shots on goal plus blocked shots from play-by-play. The API doesn't record missed
+          shots. Null like home_shots_on_goal.
+      - name: away_shot_attempts
+        description: Same as home_shot_attempts, for the away team.
 
   - name: fct_shots
     description: >
@@ -97,12 +225,27 @@ models:
           arguments:
             combination_of_columns: [game_id, event_index]
     columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
       - name: game_id
+        description: "{{ doc('game_id') }}"
         data_tests:
           - relationships:
               arguments:
                 to: ref('fct_games')
                 field: game_id
+      - name: event_index
+        description: "{{ doc('event_index') }}"
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+      - name: season_type
+        description: "{{ doc('season_type') }}"
+      - name: period
+        description: "{{ doc('period') }}"
+      - name: period_seconds
+        description: "{{ doc('period_seconds') }}"
+      - name: game_seconds
+        description: "{{ doc('game_seconds') }}"
       - name: shooter_player_id
         description: Warns if a shooter never appears on a roster.
         data_tests:
@@ -112,5 +255,56 @@ models:
                 field: player_id
               config:
                 severity: warn
+      - name: shooting_team_id
+        description: "{{ doc('team_id') }}"
+      - name: defending_team_id
+        description: The other team in the game.
+      - name: is_home_team
+        description: The shooting team is the home team.
+      - name: goalie_player_id
+        description: Goalie the shot was against. Null when the net was empty.
+      - name: is_empty_net
+        description: An unblocked shot with no goalie in net.
+      - name: blocker_player_id
+        description: Player who blocked the shot. Null unless blocked.
+      - name: shot_result
+        description: on_net, goal, or blocked.
+      - name: is_goal
+        description: The shot was a goal.
+      - name: is_unblocked
+        description: On net or a goal.
+      - name: goal_id
+        description: The goal this shot produced, in stg_pwhl__goals. Null unless a goal.
+      - name: shot_type
+        description: Shot type as the API describes it (wrist, slap, ...).
+      - name: is_quality_chance
+        description: The league's own "quality chance" flag.
+      - name: x_location
+        description: 0-600 along the rink, as recorded.
+      - name: y_location
+        description: 0-300 across the rink, as recorded.
+      - name: x_normalized
+        description: >
+          x_location rotated so every shot attacks the net at x = rink_net_x
+          (dbt_project.yml vars).
+      - name: y_normalized
+        description: y_location, rotated with x_normalized.
+      - name: distance_ft
+        description: Approximate distance to the net, in feet.
+      - name: angle_deg
+        description: >
+          Angle to the net: 0 straight on, 90 from the goal line, over 90 from behind it.
+      - name: goals_for_before
+        description: Goals the shooting team scored earlier in the game.
+      - name: goals_against_before
+        description: Goals the defending team scored earlier in the game.
+      - name: score_diff
+        description: goals_for_before minus goals_against_before.
+      - name: seconds_since_team_prev_shot
+        description: >
+          Seconds since the shooting team's previous unblocked shot in the same period.
+          Null for the team's first in the period.
       - name: is_rebound
-        description: Within 3 seconds of the same team's previous unblocked shot in the period.
+        description: >
+          Within rebound_window_seconds (3, in dbt_project.yml) of the same team's previous
+          unblocked shot in the period.

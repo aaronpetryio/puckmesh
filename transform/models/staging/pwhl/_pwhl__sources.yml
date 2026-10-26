@@ -14,25 +14,35 @@ sources:
         description: Responses from feed=modulekit&view=seasons.
         columns: &raw_columns
           - name: payload
-            description: Whole raw file as VARIANT. `_meta` (league, endpoint, season_id, fetched_at) + `response` (untouched API JSON).
+            description: >
+              Whole raw file as VARIANT: `_meta` (league, endpoint, partition keys, params,
+              fetched_at, content_hash) and `response` (the untouched API JSON).
             data_tests: [not_null]
           - name: source_file
             description: File path in /Volumes/raw/pwhl/landing/.
             data_tests: [unique, not_null]
           - name: loaded_at
             description: When COPY INTO loaded the file.
+          - name: content_hash
+            description: >
+              SHA-256 of the response content (extract/raw.py). The extractor compares
+              against the latest one to skip unchanged responses.
 
       - name: schedule
-        description: Responses from feed=modulekit&view=schedule, one file per season per (changed) fetch.
+        description: >
+          Responses from feed=modulekit&view=schedule, one file per season per (changed) fetch.
         columns: *raw_columns
 
       - name: teams
-        description: Responses from feed=modulekit&view=teamsbyseason, one file per season per (changed) fetch.
+        description: >
+          Responses from feed=modulekit&view=teamsbyseason, one file per season per (changed)
+          fetch.
         columns: *raw_columns
 
       - name: roster
         description: >
-          Responses from feed=modulekit&view=roster, one file per season per team per (changed) fetch.
+          Responses from feed=modulekit&view=roster, one file per season per team per
+          (changed) fetch.
           `_meta` carries both season_id and team_id.
         columns: *raw_columns
 

@@ -2,7 +2,8 @@ version: 2
 
 models:
   - name: stg_pwhl__seasons
-    description: One row per PWHL season (regular, preseason, playoffs), from the latest seasons fetch.
+    description: >
+      One row per PWHL season (regular, preseason, playoffs), from the latest seasons fetch.
     columns:
       - name: season_id
         data_tests: [unique, not_null]
@@ -135,7 +136,16 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: [shot, blocked_shot, goal, penalty, faceoff, hit, goalie_change, shootout, penaltyshot]
+                values:
+                  - shot
+                  - blocked_shot
+                  - goal
+                  - penalty
+                  - faceoff
+                  - hit
+                  - goalie_change
+                  - shootout
+                  - penaltyshot
               config:
                 severity: warn
       - name: period

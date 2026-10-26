@@ -33,7 +33,9 @@ jobs:
       # Only the dev target reads this; prod uses clean schema names.
       DBT_SCHEMA: ci
       DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
-      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '0 12 * * 1' && 'full' || 'daily') }}
+      MODE: >-
+        ${{ github.event_name == 'workflow_dispatch' && inputs.mode
+        || (github.event.schedule == '0 12 * * 1' && 'full' || 'daily') }}
 
     steps:
       - uses: actions/checkout@v4

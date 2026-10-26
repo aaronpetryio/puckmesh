@@ -2,6 +2,8 @@ name: puckmesh
 version: "0.1.0"
 config-version: 2
 profile: puckmesh
+# Same range as dbt-core in requirements.txt.
+require-dbt-version: [">=1.10.0", "<2.0.0"]
 
 model-paths: ["models"]
 macro-paths: ["macros"]
