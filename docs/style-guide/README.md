@@ -53,7 +53,7 @@ follow the new rule. Record notable decisions in the table below.
 | SQL keyword case | lowercase | dbt Labs style; matches the existing models | dbt "How we style our SQL" |
 | Aliases in `select` | one space before `as`, no column alignment | Aligned columns turn a one-line change into a block re-indent; dbt's examples don't align | dbt style; principle 3 |
 | SQL line length | 100 (dbt Labs uses 80) | VARIANT path + cast expressions don't fit in 80 | — |
-| `group by` | `group by all` (dbt prefers `group by 1, 2`) | Can't drift out of sync with the select list; Databricks, Snowflake, DuckDB, and BigQuery support it | — |
+| `group by` | Column names: `group by game_id, period` (dbt prefers `group by 1, 2`) | The grain is readable where it's set; no positions to recount when the select list changes | Deviation from dbt style; SQLFluff AM06 |
 | Joins | `on`, never `using` | Explicit, and `using` changes how `select *` and qualified names behave | SQLFluff ST07 |
 | Final `select` | Output columns listed in the final `select`, not `select * from final` | Already consistent across the project; keeps the output columns where reviewers look | Deviation from dbt style |
 | Key data type | Source integer IDs stay integers in staging | They're integers at the source; cross-league keys still to decide (see dbt guide) | Deviation from dbt style ("keys should be strings") |

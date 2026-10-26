@@ -59,8 +59,13 @@ select game_id, try_cast(event:team_id::string as int)  as scoring_team_id,
 
 ## Grouping, ordering, windows
 
-- `group by all`. (dbt prefers `group by 1, 2`; `all` has the same benefit, not
-  repeating the select list, and can't fall out of sync with it.)
+- Name the grouped columns: `group by game_id, shooting_team_id`. Not `group by 1, 2`
+  and not `group by all`, so the grain is readable right where it's set. (Deviation:
+  dbt prefers numbers, to avoid repeating the select list.) SQLFluff AM06 catches
+  numbers; a pre-commit check catches `all`.
+- Group by a column, not a long expression. If you need to group by a computed value,
+  compute it in an earlier CTE and group by its name.
+- `order by` follows the same rule: names, not positions.
 - Plain columns before aggregates and window functions in the select list.
 - Aggregate before joining, on the smallest data you can.
 - `order by` in a window gives every column a direction or none of them:
@@ -102,7 +107,7 @@ should give null. Don't mix `cast(x as int)` in.
 
 ### Dialect-specific functions
 
-`qualify`, `count_if`, `min_by`/`max_by`, `group by all`, and `ignore nulls` are fine to
+`qualify`, `count_if`, `min_by`/`max_by`, and `ignore nulls` are fine to
 use everywhere. VARIANT paths (`:`), `variant_explode`, and `try_variant_get` belong only
 in staging and base models, which keeps the README's "swap the warehouse by rewriting
 staging" promise.
@@ -140,6 +145,8 @@ From `sqlfluff lint transform` on main: 20 of 21 files fail, almost all on layou
 - Initialism aliases: `tests/assert_pwhl_goals_match_final_score.sql` (`g`, `h`, `a`, `s`).
 - Unqualified columns with two tables in scope: `int_shots_enriched` (final select).
 - Join condition order: `int_shots_enriched`, `fct_games`.
+- `group by all`: `int_shots_enriched` (twice), `fct_games` (`shot_totals`), and the
+  singular test.
 - Redundant `nullif` inside integer `try_cast`: 14 places in staging.
 - Strict vs lenient casts don't follow the table above: event models `try_cast` their keys
   (`team_id`, `player_id`) while `stg_pwhl__games` casts keys strictly.

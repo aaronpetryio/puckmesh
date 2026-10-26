@@ -52,3 +52,7 @@ preferred_type_casting_style = shorthand
 
 [sqlfluff:rules:convention.not_equal]
 preferred_not_equal_style = c_style
+
+[sqlfluff:rules:ambiguous.column_references]
+# Name the columns: group by game_id, period. Not 1, 2 and not `all`.
+group_by_and_order_by_style = explicit

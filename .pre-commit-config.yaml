@@ -25,6 +25,15 @@ repos:
       - id: sqlfluff-lint
         files: ^transform/(models|tests|macros|analyses|snapshots)/
 
+  # SQLFluff's AM06 catches `group by 1, 2` but not `group by all`.
+  - repo: local
+    hooks:
+      - id: no-group-by-all
+        name: "group by column names, not `all` (docs/style-guide/sql.md)"
+        language: pygrep
+        entry: "(?i)\\bgroup\\s+by\\s+all\\b"
+        files: \.sql$
+
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
