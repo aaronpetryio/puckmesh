@@ -81,7 +81,7 @@ def backfill_hashes(league: str) -> dict[str, int]:
                 response = json.loads(local.read_text(encoding="utf-8"))["response"]
                 values.append((source_file, content_hash(response)))
             for start in range(0, len(values), 200):
-                batch = values[start:start + 200]
+                batch = values[start : start + 200]
                 rows = ", ".join(f"('{f}', '{h}')" for f, h in batch)
                 cur.execute(
                     f"""
@@ -99,4 +99,6 @@ def _add_hash_column(cur, table: str) -> None:
     # Tables created before content hashes existed don't have the column yet.
     cur.execute(f"DESCRIBE TABLE {table}")
     if "content_hash" not in {row.col_name for row in cur.fetchall()}:
-        cur.execute(f"ALTER TABLE {table} ADD COLUMN content_hash STRING COMMENT 'SHA-256 of the response content (extract/raw.py)'")
+        cur.execute(
+            f"ALTER TABLE {table} ADD COLUMN content_hash STRING COMMENT 'SHA-256 of the response content (extract/raw.py)'"
+        )

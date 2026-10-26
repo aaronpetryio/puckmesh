@@ -28,11 +28,15 @@ _REDACTED_PARAMS = {"key", "client_code", "fmt", "lang"}
 
 def content_hash(response) -> str:
     """SHA-256 of the response's content: key order and the []/{} empty-field quirk ignored."""
-    canonical = json.dumps(_normalize(response), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    canonical = json.dumps(
+        _normalize(response), sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def save(league: str, endpoint: str, response, params: dict, state: State, **partitions: int) -> Path | None:
+def save(
+    league: str, endpoint: str, response, params: dict, state: State, **partitions: int
+) -> Path | None:
     """Write the response to a new file, or return None if its content is already stored.
 
     `partitions` (e.g. season_id=8, team_id=4) become nested folders, in the order given,
@@ -62,7 +66,10 @@ def save(league: str, endpoint: str, response, params: dict, state: State, **par
 
     # No colons: the filename has to be valid on Windows too.
     path = folder / f"{fetched_at.strftime('%Y%m%dT%H%M%S%fZ')}.json"
-    path.write_text(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    path.write_text(
+        json.dumps(envelope, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     state.record(endpoint, partitions, digest)
     return path
 

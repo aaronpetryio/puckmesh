@@ -1,7 +1,9 @@
 -- One row per team, with its most recent name, code, and logo. Season-by-season names
 -- live in stg_pwhl__teams; fct_games carries the name each game was played under.
 with teams as (
-    select teams.*, seasons.start_date
+    select
+        teams.*,
+        seasons.start_date
     from {{ ref('stg_pwhl__teams') }} as teams
     inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
     where not teams.is_placeholder
@@ -18,7 +20,7 @@ span as (
         team_id,
         min_by(season_id, start_date) as first_season_id,
         max_by(season_id, start_date) as last_season_id,
-        count(*)                      as seasons_listed
+        count(*) as seasons_listed
     from teams
     group by team_id
 )

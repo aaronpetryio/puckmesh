@@ -15,9 +15,9 @@ select
     period_seconds,
     game_seconds,
 
-    try_cast(event:team_id::string as int)                       as team_id,
-    try_cast(nullif(event:goalie_in_id::string, '') as int)      as goalie_in_player_id,
-    try_cast(nullif(event:goalie_out_id::string, '') as int)     as goalie_out_player_id,
+    try_cast(event:team_id::string as int) as team_id,
+    try_cast(nullif(event:goalie_in_id::string, '') as int) as goalie_in_player_id,
+    try_cast(nullif(event:goalie_out_id::string, '') as int) as goalie_out_player_id,
 
     source_fetched_at
 from events

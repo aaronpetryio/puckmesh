@@ -23,6 +23,11 @@ apply_dbt_builtins = True
 
 [sqlfluff:indentation]
 tab_space_size = 4
+# Keep the first join condition on the `on` line, as in dbt's examples:
+#     left join goals
+#         on goals.game_id = shots.game_id
+#         and goals.event_index < shots.event_index
+indented_on_contents = False
 
 [sqlfluff:layout:type:comma]
 spacing_before = touch

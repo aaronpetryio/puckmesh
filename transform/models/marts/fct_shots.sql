@@ -19,8 +19,8 @@ select
     shots.blocker_player_id,
 
     shots.shot_result,
-    shots.shot_result = 'goal'                                  as is_goal,
-    shots.shot_result != 'blocked'                              as is_unblocked,
+    shots.shot_result = 'goal' as is_goal,
+    shots.shot_result != 'blocked' as is_unblocked,
     shots.goal_id,
     shots.shot_type,
     shots.is_quality_chance,
@@ -36,6 +36,6 @@ select
     shots.goals_against_before,
     shots.score_diff,
     shots.seconds_since_team_prev_shot,
-    coalesce(shots.seconds_since_team_prev_shot <= 3, false)  as is_rebound
+    coalesce(shots.seconds_since_team_prev_shot <= 3, false) as is_rebound
 from {{ ref('int_shots_enriched') }} as shots
 inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)

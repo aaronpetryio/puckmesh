@@ -2,7 +2,9 @@
 -- recent roster entry. Built from rosters (not the API's player list), which leaves out
 -- the empty duplicate player records the league's database contains.
 with roster as (
-    select roster.*, seasons.start_date
+    select
+        roster.*,
+        seasons.start_date
     from {{ ref('stg_pwhl__roster_players') }} as roster
     inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
 ),
@@ -18,10 +20,10 @@ latest as (
 career as (
     select
         player_id,
-        min_by(season_id, start_date)   as first_season_id,
-        max_by(season_id, start_date)   as last_season_id,
-        count(distinct season_id)       as seasons_on_roster,
-        count(distinct team_id)         as teams_played_for
+        min_by(season_id, start_date) as first_season_id,
+        max_by(season_id, start_date) as last_season_id,
+        count(distinct season_id) as seasons_on_roster,
+        count(distinct team_id) as teams_played_for
     from roster
     group by player_id
 )

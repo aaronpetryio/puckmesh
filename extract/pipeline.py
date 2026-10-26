@@ -63,9 +63,13 @@ def run(client: HockeyTechClient, mode: str, today: date | None = None) -> None:
                 response, params = play_by_play.fetch(client, game_id)
                 save(play_by_play.NAME, response, params, **partitions)
 
-    print(f"{mode} run: fetched {sum(fetched.values())} responses, {sum(saved.values())} new or changed")
+    print(
+        f"{mode} run: fetched {sum(fetched.values())} responses, {sum(saved.values())} new or changed"
+    )
     for endpoint in sorted(fetched):
-        print(f"  {endpoint:14} fetched {fetched[endpoint]:4}  saved {saved[endpoint]:4}")
+        print(
+            f"  {endpoint:14} fetched {fetched[endpoint]:4}  saved {saved[endpoint]:4}"
+        )
 
     if sum(saved.values()):
         uploaded, skipped = upload(league)

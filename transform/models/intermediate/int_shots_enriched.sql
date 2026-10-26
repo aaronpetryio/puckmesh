@@ -7,11 +7,19 @@ with shots as (
 ),
 
 goals as (
-    select game_id, event_index, scoring_team_id from {{ ref('stg_pwhl__goals') }}
+    select
+        game_id,
+        event_index,
+        scoring_team_id
+    from {{ ref('stg_pwhl__goals') }}
 ),
 
 games as (
-    select game_id, home_team_id, away_team_id from {{ ref('stg_pwhl__games') }}
+    select
+        game_id,
+        home_team_id,
+        away_team_id
+    from {{ ref('stg_pwhl__games') }}
 ),
 
 attack_side as (
@@ -34,7 +42,7 @@ score_state as (
     select
         shots.game_id,
         shots.event_index,
-        count_if(goals.scoring_team_id = shots.shooting_team_id)  as goals_for_before,
+        count_if(goals.scoring_team_id = shots.shooting_team_id) as goals_for_before,
         count_if(goals.scoring_team_id != shots.shooting_team_id) as goals_against_before
     from shots
     left join goals
@@ -49,10 +57,16 @@ located as (
         case when shots.shooting_team_id = games.home_team_id then games.away_team_id else games.home_team_id end
             as defending_team_id,
         -- Rotate 180 degrees when attacking left, so every shot attacks the net at x = rink_net_x.
-        case when coalesce(attack_side.attacks_left, shots.is_home_team)
-            then 600 - shots.x_location else shots.x_location end as x_normalized,
-        case when coalesce(attack_side.attacks_left, shots.is_home_team)
-            then 300 - shots.y_location else shots.y_location end as y_normalized
+        case
+            when coalesce(attack_side.attacks_left, shots.is_home_team)
+                then 600 - shots.x_location
+            else shots.x_location
+        end as x_normalized,
+        case
+            when coalesce(attack_side.attacks_left, shots.is_home_team)
+                then 300 - shots.y_location
+            else shots.y_location
+        end as y_normalized
     from shots
     inner join games on games.game_id = shots.game_id
     left join attack_side
@@ -67,12 +81,12 @@ select
     round(sqrt(
         power(({{ var('rink_net_x') }} - x_normalized) / {{ var('rink_units_per_foot') }}, 2)
         + power((y_normalized - {{ var('rink_center_y') }}) / {{ var('rink_units_per_foot') }}, 2)
-    ), 1)                                                         as distance_ft,
+    ), 1) as distance_ft,
     -- 0 = straight on; 90 = from the goal line; over 90 = from behind the net.
     round(degrees(atan2(
         abs(y_normalized - {{ var('rink_center_y') }}),
         {{ var('rink_net_x') }} - x_normalized
-    )), 1)                                                        as angle_deg,
+    )), 1) as angle_deg,
 
     score_state.goals_for_before,
     score_state.goals_against_before,
@@ -82,7 +96,7 @@ select
     game_seconds - lag(case when shot_result != 'blocked' then game_seconds end) ignore nulls over (
         partition by located.game_id, located.shooting_team_id, located.period
         order by located.event_index
-    )                                                             as seconds_since_team_prev_shot
+    ) as seconds_since_team_prev_shot
 from located
 inner join score_state
     on score_state.game_id = located.game_id

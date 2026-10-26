@@ -22,7 +22,7 @@ shot_totals as (
         game_id,
         shooting_team_id,
         count_if(shot_result in ('on_net', 'goal')) as shots_on_goal,
-        count(*)                                    as shot_attempts
+        count(*) as shot_attempts
     from {{ ref('stg_pwhl__shots') }}
     group by all
 )
@@ -38,11 +38,11 @@ select
     games.is_final,
 
     games.home_team_id,
-    home.team_code                                      as home_team_code,
-    home.team_name                                      as home_team_name,
+    home.team_code as home_team_code,
+    home.team_name as home_team_name,
     games.away_team_id,
-    away.team_code                                      as away_team_code,
-    away.team_name                                      as away_team_name,
+    away.team_code as away_team_code,
+    away.team_name as away_team_name,
 
     games.home_goals,
     games.away_goals,
@@ -50,21 +50,21 @@ select
         when not games.is_final then null
         when games.home_goals > games.away_goals then games.home_team_id
         else games.away_team_id
-    end                                                 as winning_team_id,
+    end as winning_team_id,
     case
         when not games.is_final then null
         when shootouts.game_id is not null then 'shootout'
         when games.went_to_overtime then 'overtime'
         else 'regulation'
-    end                                                 as decision,
+    end as decision,
     games.went_to_overtime,
-    shootouts.game_id is not null                       as went_to_shootout,
+    shootouts.game_id is not null as went_to_shootout,
     shootouts.shootout_winning_team_id,
 
-    home_shots.shots_on_goal                            as home_shots_on_goal,
-    away_shots.shots_on_goal                            as away_shots_on_goal,
-    home_shots.shot_attempts                            as home_shot_attempts,
-    away_shots.shot_attempts                            as away_shot_attempts
+    home_shots.shots_on_goal as home_shots_on_goal,
+    away_shots.shots_on_goal as away_shots_on_goal,
+    home_shots.shot_attempts as home_shot_attempts,
+    away_shots.shot_attempts as away_shot_attempts
 from games
 inner join {{ ref('stg_pwhl__seasons') }} as seasons using (season_id)
 left join teams as home

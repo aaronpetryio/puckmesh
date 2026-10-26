@@ -39,7 +39,9 @@ class State:
                     """
                 )
                 for row in cur.fetchall():
-                    latest[(endpoint, row.season_id, row.team_id, row.game_id)] = row.content_hash
+                    latest[(endpoint, row.season_id, row.team_id, row.game_id)] = (
+                        row.content_hash
+                    )
         return cls(latest)
 
     def latest_hash(self, endpoint: str, partitions: dict) -> str | None:

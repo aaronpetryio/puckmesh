@@ -7,7 +7,9 @@ from databricks import sql
 
 def connect():
     return sql.connect(
-        server_hostname=os.environ["DATABRICKS_HOST"].removeprefix("https://").rstrip("/"),
+        server_hostname=os.environ["DATABRICKS_HOST"]
+        .removeprefix("https://")
+        .rstrip("/"),
         http_path=os.environ["DATABRICKS_HTTP_PATH"],
         access_token=os.environ["DATABRICKS_TOKEN"],
     )

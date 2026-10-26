@@ -10,4 +10,8 @@ def fetch(client, game_id: int):
 
 def final_game_ids(schedule_response) -> list[int]:
     """Games with play-by-play to fetch: unplayed games have none."""
-    return sorted(int(g["game_id"]) for g in schedule_response["SiteKit"]["Schedule"] if g["final"] == "1")
+    return sorted(
+        int(g["game_id"])
+        for g in schedule_response["SiteKit"]["Schedule"]
+        if g["final"] == "1"
+    )
