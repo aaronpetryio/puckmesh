@@ -41,8 +41,7 @@ select
     -- The API reports 0-0 for games not yet played; only trust scores once final.
     case when game:final::int = 1 then game:home_goal_count::int end as home_goals,
     case when game:final::int = 1 then game:visiting_goal_count::int end as away_goals,
-    game:overtime::int = 1 as went_to_overtime,
-    game:shootout::int = 1 as went_to_shootout,
+    game:overtime::int = 1 as has_overtime,
     try_cast(game:attendance::string as int) as attendance,
 
     fetched_at as source_fetched_at

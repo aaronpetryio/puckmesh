@@ -24,7 +24,7 @@ select
     event:lang_penalty_description::string as infraction,
     event:penalty_class::string as penalty_class,
     try_cast(event:minutes::string as decimal(4, 2)) as penalty_minutes,
-    event:pp::int = 1 as creates_power_play,
+    event:pp::int = 1 as is_power_play_penalty,
     event:penalty_shot::int = 1 as is_penalty_shot,
 
     source_fetched_at

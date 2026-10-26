@@ -65,7 +65,7 @@ select
     end as position_group,
     nullif(player:shoots::string, '') as shoots,
 
-    try_cast(player:birthdate::string as date) as birthdate,
+    try_cast(player:birthdate::string as date) as birth_date,
     nullif(player:birthtown::string, '') as birth_city,
     nullif(player:birthprov::string, '') as birth_region,
     nullif(player:birthcntry::string, '') as birth_country,

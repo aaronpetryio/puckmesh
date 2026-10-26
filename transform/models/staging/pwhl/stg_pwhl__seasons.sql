@@ -27,7 +27,7 @@ select
         when season:season_name::string ilike '%pre%season%' then 'preseason'
         else 'regular'
     end as season_type,
-    season:career::int = 1 as counts_toward_career,
+    season:career::int = 1 as is_career_season,
     try_cast(season:start_date::string as date) as start_date,
     try_cast(season:end_date::string as date) as end_date
 from seasons

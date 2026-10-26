@@ -18,7 +18,7 @@ select
     try_cast(event:team_id::string as int) as shooting_team_id,
     event:home::int = 1 as is_home_team,
     try_cast(event:goalie_id::string as int) as goalie_player_id,
-    event:result::string as result,
+    event:result::string as shot_result_description,
     try_cast(event:game_goal_id::string as int) as goal_id,
 
     source_fetched_at

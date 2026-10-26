@@ -47,7 +47,7 @@ select
     latest.position,
     latest.position_group,
     latest.shoots,
-    latest.birthdate,
+    latest.birth_date,
     latest.birth_city,
     latest.birth_region,
     latest.birth_country,

@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: dim_team
+  - name: dim_teams
     description: One row per team (placeholders excluded), with its most recent name, code, and logo.
     columns:
       - name: team_id
@@ -9,15 +9,15 @@ models:
       - name: team_name
         data_tests: [not_null]
 
-  - name: dim_player
+  - name: dim_players
     description: >
       One row per player who has appeared on a roster, with attributes from their most
       recent roster entry and career span.
     data_tests:
-      # The same person under two player_ids would show up as a repeated name + birthdate.
+      # The same person under two player_ids would show up as a repeated name + birth date.
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            combination_of_columns: [full_name, birthdate]
+            combination_of_columns: [full_name, birth_date]
           config:
             severity: warn
     columns:
@@ -37,13 +37,13 @@ models:
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_player')
+                to: ref('dim_players')
                 field: player_id
       - name: team_id
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_team')
+                to: ref('dim_teams')
                 field: team_id
 
   - name: fct_games
@@ -57,13 +57,13 @@ models:
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_team')
+                to: ref('dim_teams')
                 field: team_id
       - name: away_team_id
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_team')
+                to: ref('dim_teams')
                 field: team_id
       - name: decision
         description: regulation, overtime, or shootout. Null until final.
@@ -86,7 +86,7 @@ models:
               arguments:
                 expression: "= winning_team_id"
               config:
-                where: went_to_shootout
+                where: has_shootout
 
   - name: fct_shots
     description: >
@@ -108,7 +108,7 @@ models:
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_player')
+                to: ref('dim_players')
                 field: player_id
               config:
                 severity: warn

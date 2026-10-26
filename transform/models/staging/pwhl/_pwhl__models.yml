@@ -14,7 +14,10 @@ models:
                 values: [regular, preseason, playoffs]
 
   - name: stg_pwhl__games
-    description: One row per PWHL game, typed and renamed from the latest schedule fetch for each season.
+    description: >
+      One row per PWHL game, typed and renamed from the latest schedule fetch for each season.
+      The schedule's own `shootout` flag is left out: it missed 11 of 29 shootouts (checked
+      against play-by-play). Use stg_pwhl__shootout_attempts, as fct_games does.
     columns:
       - name: game_id
         data_tests: [unique, not_null]
@@ -43,10 +46,6 @@ models:
         description: Null until the game is final. Includes the +1 for a shootout win.
       - name: away_goals
         description: Null until the game is final. Includes the +1 for a shootout win.
-      - name: went_to_shootout
-        description: >
-          The schedule's own flag. Unreliable: it missed 11 of 29 shootouts (checked against
-          shootout attempts in play-by-play). Derive from stg_pwhl__shootout_attempts instead.
 
   - name: stg_pwhl__teams
     description: >
@@ -249,3 +248,5 @@ models:
         data_tests: [unique, not_null]
       - name: shooter_player_id
         data_tests: [not_null]
+      - name: shot_result_description
+        description: The API's result text, as recorded. Not yet mapped to shot_result values.

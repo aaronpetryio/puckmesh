@@ -16,7 +16,7 @@ select
     try_cast(event:home_player_id::string as int) as home_player_id,
     try_cast(event:visitor_player_id::string as int) as away_player_id,
     try_cast(event:win_team_id::string as int) as winning_team_id,
-    event:home_win::int = 1 as home_won,
+    event:home_win::int = 1 as is_home_win,
 
     try_cast(event:location_id::string as int) as faceoff_location_id,
     try_cast(event:x_location::string as int) as x_location,

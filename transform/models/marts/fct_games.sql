@@ -72,11 +72,11 @@ select
     case
         when not games.is_final then null
         when shootouts.game_id is not null then 'shootout'
-        when games.went_to_overtime then 'overtime'
+        when games.has_overtime then 'overtime'
         else 'regulation'
     end as decision,
-    games.went_to_overtime,
-    shootouts.game_id is not null as went_to_shootout,
+    games.has_overtime,
+    shootouts.game_id is not null as has_shootout,
     shootouts.shootout_winning_team_id,
 
     home_shots.shots_on_goal as home_shots_on_goal,

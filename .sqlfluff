@@ -53,6 +53,10 @@ aliasing = explicit
 [sqlfluff:rules:aliasing.column]
 aliasing = explicit
 
+[sqlfluff:rules:references.keywords]
+# `position` is the hockey term and isn't reserved in Databricks SQL.
+ignore_words = position
+
 [sqlfluff:rules:convention.casting_style]
 # `::` is already required for VARIANT paths (payload:_meta.season_id::int).
 preferred_type_casting_style = shorthand
