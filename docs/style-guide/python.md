@@ -67,8 +67,8 @@ Use the same domain words as the dbt project: `season_id`, `game_id`, `endpoint`
 ## Configuration and secrets
 
 - Environment variables are read in one module (`extract/db.py` today, or a
-  `config.py`), each with its default, not scattered (`RAW_CATALOG` is currently read
-  in both `db.py` and `upload.py`).
+  `config.py`), each with its default, not scattered. The one exception is the
+  Databricks SDK, which reads `DATABRICKS_HOST` / `DATABRICKS_TOKEN` itself.
 - Every variable the code reads is listed in `.env.example` with a comment.
 - No secrets in code or in raw files. The HockeyTech key in `client.py` is public (it's in
   the league's own website); say so in a comment so nobody "fixes" it into a secret.
@@ -107,15 +107,7 @@ interpolate only backtick-quoted identifiers from config.
   scheduled run.
 - Keep dev tools (ruff, pytest, sqlfluff, pre-commit) in a separate dev group.
 
-## Where main doesn't follow this yet
+## Not done yet
 
-From `ruff check .` on main (106 findings; `ruff format` + `--fix` leaves 72):
-
-- Missing type hints on 27 parameters and 8 public returns (`client`, `args`, `response`).
-- `print` in `pipeline.py` and `upload.py`.
-- Values formatted into SQL in `load.backfill_hashes`; identifier interpolation
-  unmarked in `db.py`, `load.py`, `state.py`.
-- Unused import `pathlib.Path` in `upload.py`; `timezone.utc` instead of `UTC`.
-- 24 lines over 88 characters that the formatter can't split (comments and SQL strings).
-- No tests, no `pyproject.toml` dependencies, no lockfile.
-- `RAW_CATALOG` / `RAW_VOLUME` aren't in `.env.example`.
+- Dependencies are still in `requirements.txt` with lower bounds only; move them to
+  `pyproject.toml` with a lockfile, together with the CI workflow that installs them.

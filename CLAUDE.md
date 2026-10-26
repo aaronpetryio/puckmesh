@@ -27,27 +27,37 @@ Run dbt from `transform/` (the project-local `profiles.yml` is read from there):
 
 ```bash
 python -m extract run --mode daily          # fetch changed data, upload, load (what the schedule runs)
-python -m extract <endpoint> --all          # seasons | schedule | teams | roster | play-by-play
+python -m extract seasons                   # the season list
+python -m extract <endpoint> --all          # schedule | teams | roster | play-by-play (or --season <id>)
 cd transform
 dotenv -f ../.env run -- dbt deps           # first time, or after changing packages.yml
 dotenv -f ../.env run -- dbt build --select <model>+   # build a model and everything downstream, with tests
 dotenv -f ../.env run -- dbt build          # everything
 ```
 
-**Verify before saying done.** For dbt changes, `dbt build --select` the changed models plus downstream and report the result. If you can't run it (no `.env` or Databricks access, e.g. in a cloud session), say so plainly. Don't claim it works. Report failures with their output.
+Checks that need no warehouse, from the repo root:
+
+```bash
+pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (what CI will run)
+python -m pytest                            # extract/ unit tests
+```
+
+**Verify before saying done.** Run the checks above. For dbt changes, also `dbt build --select` the changed models plus downstream and report the result. If you can't run it (no `.env` or Databricks access, e.g. in a cloud session), say so plainly. Don't claim it works. Report failures with their output.
 
 ## Layout and conventions
 
-- `extract/`: `client.py` (HockeyTech client), `endpoints/` (one module per endpoint: `NAME`, `fetch()`), `raw.py` (save locally, skip unchanged by content hash), `upload.py` → Volume, `load.py` → `COPY INTO`, `pipeline.py` (daily/full runs), `__main__.py` (CLI; add new subcommands here).
-- `transform/models/`
-  - `staging/<league>/`: `stg_<league>__<entity>`, views in silver. Parse VARIANT, cast, rename, dedupe to the latest fetch. No business logic.
-  - `staging/<league>/base/`: shared parsing that several staging models build on (e.g. play-by-play events).
-  - `intermediate/`: `int_*`, views in silver. Cross-model logic and enrichment.
-  - `marts/`: `dim_*` / `fct_*`, tables in gold. Website- and model-ready.
-- Every model gets an entry in its folder's `_*__models.yml` with a description and tests on its grain (`unique`/`not_null`, or `dbt_utils.unique_combination_of_columns`).
-- Reconciliation checks go in `transform/tests/assert_*.sql` (return failing rows).
-- SQL style: CTEs (`with source as (...)`), `select * from {{ ref() }}` import CTEs at the top, lowercase keywords, aligned `as` aliases, a comment above anything non-obvious. Match the existing models.
-- Every model carries `league_id` so leagues can be unioned later.
-- Python: plain functions and modules, docstrings on public functions, no frameworks. Match the existing code.
-- Commits: short imperative summary of the feature, e.g. "Add play-by-play: extraction, base model, per-event staging".
+Style rules (naming, SQL layout, YAML, tests, Python) are in `docs/style-guide/`, and the linters enforce most of them. When this file and the guide disagree, the guide wins; fix this file. The points below are the ones that come up most.
 
+- `extract/`: `client.py` (HockeyTech client), `endpoints/` (one module per endpoint: `NAME`, `fetch()`, and helpers that read its response; only that module knows the response's shape), `raw.py` (save locally, skip unchanged by content hash), `upload.py` → Volume, `load.py` → `COPY INTO`, `db.py` (warehouse connection and settings; read environment variables here, not elsewhere), `pipeline.py` (daily/full runs), `__main__.py` (CLI; add new subcommands here). Tests in `tests/`.
+- `transform/models/`
+  - `staging/<league>/`: `stg_<league>__<entity>s`, views in silver. Parse VARIANT, cast, rename, dedupe to the latest fetch. No joins, aggregation, or business logic.
+  - `staging/<league>/base/`: shared parsing that several staging models build on (e.g. play-by-play events).
+  - `intermediate/`: `int_<entity>s_<verb>ed` (e.g. `int_shots_enriched`), views in silver. Cross-model logic and enrichment.
+  - `marts/`: `dim_<entity>s` / `fct_<grain>s` (plural, named for what one row is), tables in gold. Website- and model-ready.
+- Every model gets an entry in its folder's `_*__models.yml` with a description stating its grain and tests on that grain (`unique`/`not_null`, or `dbt_utils.unique_combination_of_columns`). Every mart column gets a description.
+- Reconciliation checks go in `transform/tests/assert_*.sql` (return failing rows).
+- SQL: import CTEs at the top for every `ref()`, lowercase keywords, one space before `as` (no aligned aliases), `on` joins, `group by` column names. A comment above anything non-obvious; the model's purpose goes in its YAML description, not a header comment. Constants with domain meaning are `vars` in `dbt_project.yml`.
+- Booleans start with `is_` or `has_`; timestamps end in `_at`, dates in `_date`.
+- Every model carries `league_id` so leagues can be unioned later.
+- Python: plain functions and modules, no frameworks. Type hints on public functions; a docstring on every module, and on functions whose name and types don't say enough. `logging` in library modules, `print` only in `__main__.py`.
+- Commits: short imperative summary of the feature, e.g. "Add play-by-play: extraction, base model, per-event staging".

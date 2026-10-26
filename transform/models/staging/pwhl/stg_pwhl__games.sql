@@ -1,8 +1,8 @@
 with source as (
     select
-        payload:_meta.season_id::int        as season_id,
+        payload:_meta.season_id::int as season_id,
         payload:_meta.fetched_at::timestamp as fetched_at,
-        payload:response                    as response
+        payload:response as response
     from {{ source('pwhl', 'schedule') }}
 ),
 
@@ -22,28 +22,27 @@ games as (
 )
 
 select
-    'pwhl'                                              as league_id,
-    game:game_id::int                                   as game_id,
-    game:season_id::int                                 as season_id,
-    try_cast(game:game_number::string as int)           as game_number,
-    try_cast(game:date_played::string as date)          as game_date,
+    'pwhl' as league_id,
+    game:game_id::int as game_id,
+    game:season_id::int as season_id,
+    try_cast(game:game_number::string as int) as game_number,
+    try_cast(game:date_played::string as date) as game_date,
     try_cast(game:GameDateISO8601::string as timestamp) as scheduled_start_at,
-    game:timezone::string                               as venue_timezone,
-    try_cast(game:location::string as int)              as venue_id,
+    game:timezone::string as venue_timezone,
+    try_cast(game:location::string as int) as venue_id,
 
-    game:home_team::int                                 as home_team_id,
-    game:home_team_code::string                         as home_team_code,
-    game:visiting_team::int                             as away_team_id,
-    game:visiting_team_code::string                     as away_team_code,
+    game:home_team::int as home_team_id,
+    game:home_team_code::string as home_team_code,
+    game:visiting_team::int as away_team_id,
+    game:visiting_team_code::string as away_team_code,
 
-    game:final::int = 1                                 as is_final,
-    game:game_status::string                            as game_status,
+    game:final::int = 1 as is_final,
+    game:game_status::string as game_status,
     -- The API reports 0-0 for games not yet played; only trust scores once final.
-    case when game:final::int = 1 then game:home_goal_count::int end     as home_goals,
+    case when game:final::int = 1 then game:home_goal_count::int end as home_goals,
     case when game:final::int = 1 then game:visiting_goal_count::int end as away_goals,
-    game:overtime::int = 1                              as went_to_overtime,
-    game:shootout::int = 1                              as went_to_shootout,
-    try_cast(nullif(game:attendance::string, '') as int) as attendance,
+    game:overtime::int = 1 as has_overtime,
+    try_cast(game:attendance::string as int) as attendance,
 
-    fetched_at                                          as source_fetched_at
+    fetched_at as source_fetched_at
 from games

@@ -37,8 +37,9 @@ select game_id, try_cast(event:team_id::string as int)  as scoring_team_id,
 
 - **Import CTEs at the top.** Every `{{ ref() }}` / `{{ source() }}` goes in a CTE named
   after the model it reads (`games`, `shots`), not inline in a later `join`.
-  Select only the columns you use, filtered as early as possible (dbt: "Limit the data
-  scanned by CTEs as much as possible").
+  `select *` when the model uses most of the columns; list them when it uses a few
+  (`seasons` → `season_id, season_type`). Filter as early as possible (dbt: "Limit the
+  data scanned by CTEs as much as possible").
 - **Functional CTEs do one thing**, and their names say what: `latest_fetch`,
   `attack_side`, `score_state`. Avoid names that don't describe the step (`renamed`
   for a CTE that parses height, `final`, `cte1`).
@@ -71,7 +72,7 @@ select game_id, try_cast(event:team_id::string as int)  as scoring_team_id,
 - `order by` in a window gives every column a direction or none of them:
   `order by start_date desc, team_id asc`.
 - Deduplicate with `qualify row_number() over (...) = 1`, and say in a comment what the
-  tiebreaker is for if there is one (see `dim_player`).
+  tiebreaker is for if there is one (see `dim_players`).
 
 ## Comparisons and nulls
 
@@ -89,8 +90,8 @@ Raw tables store whole API responses as `VARIANT`. Extract with path syntax and 
 
 | Field | Cast | Why |
 |---|---|---|
-| Keys and fields the model depends on (`game_id`, `season_id`, `home_team`) | strict: `game:game_id::int` | Fails loudly if the API changes, and the build stops instead of loading nulls |
-| Optional or messy attributes (`attendance`, `goalie_id`, coordinates) | lenient: `try_cast(event:goalie_id::string as int)` | Blank or odd values become null |
+| Keys we write (`_meta.season_id`) and keys of the schedule, team, and roster lists | strict: `game:game_id::int` | Fails loudly if the API changes, and the build stops instead of loading nulls |
+| Play-by-play event fields, including IDs, and optional or messy attributes (`attendance`, `goalie_id`, coordinates) | lenient: `try_cast(event:goalie_id::string as int)` | Event fields arrive as strings and can be blank; a null is caught by a test instead of failing the build |
 | Optional strings | `nullif(team:city::string, '')` | Blank becomes null |
 | 0/1 flags | `event:home::int = 1` | Null when the field is missing; `coalesce(..., false)` if false is right |
 
@@ -98,7 +99,8 @@ Raw tables store whole API responses as `VARIANT`. Extract with path syntax and 
 the same as `try_cast(x::string as int)`. Use the shorter one.
 
 Every `try_cast` is a decision to accept bad data quietly. When it guards something
-downstream logic depends on, back it with a `not_null` or `accepted_range` test.
+downstream logic depends on, back it with a `not_null` or `accepted_range` test, as the
+event models do for `shooter_player_id`, `scoring_team_id`, and the other IDs they need.
 
 ### Casting style
 
@@ -132,23 +134,13 @@ Same rules (lowercase, layout, qualification). Also:
 - **Values are bound, never formatted in.** `databricks-sql-connector` (3.0+) supports
   named parameters: `cur.execute("select ... where source_file = :f", {"f": path})`.
 - **Identifiers** (catalog, schema, table) can't be bound. Only interpolate them from code
-  constants or trusted config, always backtick-quoted, and mark the line
-  `# noqa: S608 - identifiers only, from config` so the exception is visible.
+  constants or trusted config, always backtick-quoted (`db.raw_table()`), and mark the
+  statement `# noqa: S608` with a comment saying why, so the exception is visible.
 
-## Where main doesn't follow this yet
+## Exceptions in `.sqlfluff`
 
-From `sqlfluff lint transform` on main: 20 of 21 files fail, almost all on layout that
-`sqlfluff fix` corrects. These need a person:
-
-- `using` joins: `dim_player`, `dim_team`, `fct_games`, `fct_player_team_seasons`, `fct_shots`.
-- Inline `ref()`s in joins: `fct_games` (seasons), `fct_shots`, `fct_player_team_seasons`.
-- Initialism aliases: `tests/assert_pwhl_goals_match_final_score.sql` (`g`, `h`, `a`, `s`).
-- Unqualified columns with two tables in scope: `int_shots_enriched` (final select).
-- Join condition order: `int_shots_enriched`, `fct_games`.
-- `group by all`: `int_shots_enriched` (twice), `fct_games` (`shot_totals`), and the
-  singular test.
-- Redundant `nullif` inside integer `try_cast`: 14 places in staging.
-- Strict vs lenient casts don't follow the table above: event models `try_cast` their keys
-  (`team_id`, `player_id`) while `stg_pwhl__games` casts keys strictly.
-- Literal `600` / `300` in `int_shots_enriched` next to `rink_*` vars; `1200` in the base model.
-- Embedded SQL in `extract/` is uppercase; `extract/load.py` formats values into a `MERGE`.
+- `structure.column_order` is off: it fights dbt's "group columns by type" ordering.
+- `ambiguous.column_count` is off: it flags `select located.*`, which intermediate models
+  use on purpose to carry every staging column through.
+- `position` is allowed as a column name: it's the hockey term and isn't reserved in
+  Databricks SQL.

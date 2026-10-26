@@ -4,7 +4,6 @@ with events as (
     where event_type = 'penaltyshot'
 )
 
--- One row per penalty shot (in-game, not shootout). A scored one also appears in stg_pwhl__goals.
 select
     league_id,
     game_id,
@@ -14,13 +13,13 @@ select
     period_seconds,
     game_seconds,
 
-    try_cast(event:id::string as int)                         as penalty_shot_id,
-    try_cast(event:player_id::string as int)                  as shooter_player_id,
-    try_cast(event:team_id::string as int)                    as shooting_team_id,
-    event:home::int = 1                                       as is_home_team,
-    try_cast(nullif(event:goalie_id::string, '') as int)      as goalie_player_id,
-    event:result::string                                      as result,
-    try_cast(nullif(event:game_goal_id::string, '') as int)   as goal_id,
+    try_cast(event:id::string as int) as penalty_shot_id,
+    try_cast(event:player_id::string as int) as shooter_player_id,
+    try_cast(event:team_id::string as int) as shooting_team_id,
+    event:home::int = 1 as is_home_team,
+    try_cast(event:goalie_id::string as int) as goalie_player_id,
+    event:result::string as shot_result_description,
+    try_cast(event:game_goal_id::string as int) as goal_id,
 
     source_fetched_at
 from events

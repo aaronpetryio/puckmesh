@@ -12,8 +12,8 @@ SQL layout is in [sql.md](sql.md).
 raw.<league>.<endpoint>         bronze   loaded by extract/, declared as sources, read-only to dbt
   └─ staging/<league>/           silver   stg_<league>__<entity>s, one per source table
        └─ base/                           base_<league>__<entity>s, shared prep for several stg models
-  └─ intermediate/               silver   int_<entity>s_<verb>s, league-agnostic
-  └─ marts/                      gold     dim_<entity>s, fct_<event>s, read by ML and the website
+  └─ intermediate/               silver   int_<entity>s_<verb>ed, league-agnostic
+  └─ marts/                      gold     dim_<entity>s, fct_<grain>s, read by ML and the website
 ```
 
 | Layer | Allowed | Not allowed | Materialized |
@@ -47,9 +47,9 @@ raw.<league>.<endpoint>         bronze   loaded by extract/, declared as sources
 |---|---|---|
 | base | `base_<league>__<entity>s` | `base_pwhl__play_by_play_events` |
 | staging | `stg_<league>__<entity>s` | `stg_pwhl__shots` |
-| intermediate | `int_<entity>s_<verb>s` (no league: it's cross-league) | `int_shots_enriched` |
+| intermediate | `int_<entity>s_<verb>ed`, the verb saying what was done (no league: it's cross-league) | `int_shots_enriched` |
 | marts, dimension | `dim_<entity>s` | `dim_players` |
-| marts, fact | `fct_<event>s` | `fct_shots`, `fct_player_team_seasons` |
+| marts, fact | `fct_<grain>s`, named for what one row is | `fct_shots`, `fct_games`, `fct_player_team_seasons` |
 
 - Plural, snake_case, no dots. dbt: "Models should be pluralized."
 - Double underscore between league and entity, so the source part is unambiguous.
@@ -70,8 +70,9 @@ raw.<league>.<endpoint>         bronze   loaded by extract/, declared as sources
 | Categorical | lowercase snake_case values, tested with `accepted_values` | `shot_result in ('on_net', 'goal', 'blocked')` |
 | Home/away | `home_` / `away_`, never `visiting_` / `visitor_` | `away_goals` |
 
-- No reserved words as names (`result`, `position`, `date`): prefix them
-  (`shot_result`, `roster_position`). SQLFluff RF04 flags these.
+- No SQL keywords as names (`result`, `date`): make them specific (`shot_result`,
+  `game_date`). SQLFluff RF04 flags these. `position` is the one exception (see
+  [sql.md](sql.md#exceptions-in-sqlfluff)).
 - No abbreviations a reader has to decode. Hockey-standard ones are fine:
   `xg`, `pp`, `sog` only if spelled out in the column description.
 - Every model carries `league_id`.
@@ -108,8 +109,8 @@ checked by yamllint (`.yamllint.yml`):
   ML notebooks. Staging and intermediate columns need a description only when the name
   doesn't say everything (units, null meaning, source quirks).
 - Say what null means wherever it isn't obvious ("Null until the game is final").
-- Source quirks go in descriptions with evidence, as `went_to_shootout` does
-  ("missed 11 of 29 shootouts").
+- Source quirks go in descriptions with evidence, as `stg_pwhl__games` does for the
+  schedule's shootout flag ("missed 11 of 29 shootouts").
 - Once a mart's columns settle, add a
   [model contract](https://docs.getdbt.com/docs/mesh/govern/model-contracts)
   (`contract: {enforced: true}` with `data_type` per column) so a type or column change
@@ -149,17 +150,10 @@ write only to `dev` (each to their own `<DBT_SCHEMA>_*` schemas); only the sched
 pipeline writes to `prod`. Prod should run with its own credential (a service principal,
 if Free Edition allows) rather than a personal token.
 
-## Where main doesn't follow this yet
+## Not done yet
 
-- Singular mart names: `dim_player`, `dim_team` vs plural `fct_games`, `fct_shots`.
-- Booleans without `is_`/`has_`: `went_to_overtime`, `went_to_shootout` (games),
-  `home_won` (faceoffs), `creates_power_play` (penalties), `counts_toward_career` (seasons).
-- `birthdate` → `birth_date`; `result` (penalty shots) → `shot_result` with the same
-  values as `stg_pwhl__shots`; `position` is a reserved word.
-- Every `.sql` model restates its YAML description in a header comment, in different
-  places (top of file, before the final select, or not at all).
-- Most mart columns have no description; no contracts.
-- No unit tests.
-- No `require-dbt-version`.
-- `stg_pwhl__games.went_to_shootout` is documented as wrong but still exposed;
-  rename it to `schedule_shootout_flag` or drop it, so nobody uses it by accident.
+- No model contracts on marts (add once their columns settle).
+- No dbt unit tests (height parsing, attack-side normalization, distance/angle, decision).
+- `stg_pwhl__penalty_shots.shot_result_description` is the API's raw text; map it to
+  `shot_result` values once the possible values are known.
+- Cross-league keys: see "Keys across leagues" above.
