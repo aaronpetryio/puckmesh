@@ -283,14 +283,17 @@ models:
         description: 0-600 along the rink, as recorded.
       - name: y_location
         description: 0-300 across the rink, as recorded.
-      - name: x_normalized
+      - name: x_ft
         description: >
-          x_location rotated so every shot attacks the net at x = rink_net_x
-          (dbt_project.yml vars).
-      - name: y_normalized
-        description: y_location, rotated with x_normalized.
+          Approximate feet from center ice along the rink, turned so every shot attacks the
+          net at +89 ft. With y_ft, plots on a standard 200 x 85 ft rink centered at (0, 0).
+      - name: y_ft
+        description: >
+          Approximate feet from center ice across the rink (-42.5 to 42.5), turned with x_ft.
       - name: distance_ft
-        description: Approximate distance to the net, in feet.
+        description: >
+          Approximate distance to the net, in feet. Shots at a goalie are measured to the
+          nearer net; empty-net shots to the end the team attacked that period.
       - name: angle_deg
         description: >
           Angle to the net: 0 straight on, 90 from the goal line, over 90 from behind it.

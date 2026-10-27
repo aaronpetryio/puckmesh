@@ -34,10 +34,14 @@ and the rule gets fixed.
 ## Running the checks
 
 ```bash
-pip install pre-commit sqlfluff ruff yamllint
+pip install -r requirements-dev.txt
 pre-commit install            # once per clone: checks staged files on every commit
-pre-commit run --all-files    # the whole repo, the same checks CI runs
-sqlfluff fix transform        # auto-fix SQL layout
+pre-commit run --all-files    # the whole repo, the same checks as CI's lint job
+python -m pytest              # CI's test job
+
+# To auto-fix by hand (pre-commit installs its own copies; these are for your shell):
+pip install sqlfluff==4.4.0 ruff==0.17.2   # same versions as .pre-commit-config.yaml
+sqlfluff fix transform        # SQL layout
 ruff format . && ruff check --fix .
 ```
 

@@ -5,8 +5,11 @@ pipeline runs whatever is on it against prod every morning.
 
 ## Branches and pull requests
 
-- `main` is protected: changes arrive through pull requests, and CI must pass first
-  (GitHub → Settings → Branches → branch protection or a ruleset: "Require status checks").
+- `main` is protected by a ruleset (GitHub → Settings → Rules → Rulesets): changes
+  arrive through pull requests, the `lint`, `test`, and `dbt` checks from
+  `.github/workflows/ci.yml` must pass, and force pushes and deletion are blocked.
+- Don't stack PRs (one PR based on another's branch). If the base PR merges first,
+  the stacked one can merge into the old branch instead of `main`.
 - One topic per branch and PR. Short-lived; rebase or merge `main` in rather than letting
   it drift.
 - The PR description says what changed, why, and how it was checked (`dbt build` on dev,
@@ -28,7 +31,7 @@ history already does:
 | Where | What |
 |---|---|
 | pre-commit (every commit) | whitespace/EOF, YAML syntax, no private keys, `ruff check`, `ruff format`, `sqlfluff lint`, `yamllint` |
-| CI on every PR | the pre-commit hooks, `pytest`, `dbt deps && dbt parse`, then `dbt build --target dev` into a per-PR schema (`DBT_SCHEMA=ci_pr_<number>`) |
+| CI on every PR (`ci.yml`) | `lint`: the pre-commit hooks. `test`: `pytest`. `dbt`: `dbt build` on the dev target into `dev.ci_silver` / `dev.ci_gold` (`DBT_SCHEMA=ci`), one PR at a time; one shared schema means nothing is left behind per PR |
 | Scheduled pipeline | as today: extract, then `dbt build --target prod` |
 
 Later, when builds get slow:

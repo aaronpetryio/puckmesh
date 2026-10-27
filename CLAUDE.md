@@ -38,11 +38,13 @@ dotenv -f ../.env run -- dbt build          # everything
 Checks that need no warehouse, from the repo root:
 
 ```bash
-pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (what CI will run)
+pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (CI's lint job)
 python -m pytest                            # extract/ unit tests
 ```
 
 **Verify before saying done.** Run the checks above. For dbt changes, also `dbt build --select` the changed models plus downstream and report the result. If you can't run it (no `.env` or Databricks access, e.g. in a cloud session), say so plainly. Don't claim it works. Report failures with their output.
+
+In a cloud session without Databricks access, push the branch and open the PR: CI's `dbt` job runs the full `dbt build` against `dev.ci_*`. Read its result before reporting done.
 
 ## Layout and conventions
 
