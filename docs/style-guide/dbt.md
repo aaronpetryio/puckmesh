@@ -153,7 +153,8 @@ if Free Edition allows) rather than a personal token.
 ## Not done yet
 
 - No model contracts on marts (add once their columns settle).
-- No dbt unit tests (height parsing, attack-side normalization, distance/angle, decision).
+- dbt unit tests cover only shot geometry (`int_shots_enriched`); height parsing and
+  decision logic still have none.
 - `stg_pwhl__penalty_shots.shot_result_description` is the API's raw text; map it to
   `shot_result` values once the possible values are known.
 - Cross-league keys: see "Keys across leagues" above.

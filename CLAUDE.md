@@ -44,6 +44,8 @@ python -m pytest                            # extract/ unit tests
 
 **Verify before saying done.** Run the checks above. For dbt changes, also `dbt build --select` the changed models plus downstream and report the result. If you can't run it (no `.env` or Databricks access, e.g. in a cloud session), say so plainly. Don't claim it works. Report failures with their output.
 
+In a cloud session without Databricks access, push the branch and open the PR: CI's `dbt` job runs the full `dbt build` against `dev.ci_*`. Read its result before reporting done.
+
 ## Layout and conventions
 
 Style rules (naming, SQL layout, YAML, tests, Python) are in `docs/style-guide/`, and the linters enforce most of them. When this file and the guide disagree, the guide wins; fix this file. The points below are the ones that come up most.

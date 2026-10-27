@@ -184,6 +184,7 @@ An existing site already covers xG, GSAx, shot maps, and player cards. Focus els
 | Extract outside Databricks | Free Edition network limits; portability | — |
 | Static site + Parquet + DuckDB-WASM | Daily refresh, near-zero cost, browser search | Need live in-game updates |
 | No Airflow / Fivetran / Snowflake yet | Overkill or wrong fit for now | Phase 2+ learning goals |
+| Shot coordinates follow the fastRhockey / sportsdataverse convention (600 x 300 grid = 200 x 85 ft rink, nets at ±89 ft) | Comparable with other PWHL work; the league's own shot chart draws that rink to scale; no better calibration exists | HockeyTech publishes a scale, or someone calibrates one |
 
 ---
 
