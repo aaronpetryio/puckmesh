@@ -468,7 +468,6 @@ select
 from goals
 group by is_overtime, is_power_play, is_short_handed, is_empty_net, players_for, players_against
 order by goals desc
-limit 50
 ```
 
 ### 5d. Penalty profile
@@ -482,11 +481,11 @@ select
     penalty_minutes,
     is_power_play_penalty,
     is_penalty_shot,
+    is_bench_penalty,
     count(*) as penalties
 from dev.dbt_apetry_silver.stg_pwhl__penalties
-group by penalty_class, penalty_minutes, is_power_play_penalty, is_penalty_shot
+group by penalty_class, penalty_minutes, is_power_play_penalty, is_penalty_shot, is_bench_penalty
 order by penalties desc
-limit 50
 ```
 
 ## Results
