@@ -353,6 +353,142 @@ from per_band
 order by band_order
 ```
 
+## Findings (from the results below)
+
+- **Sample.** 26,544 shots in all; 19,376 at a goalie with 1,614 goals (8.3%). Regular season plus playoffs, which is the training set: 18,022 shots at a goalie and 1,476 goals.
+- **Preseason is left out of training.** The 2024 preseason recorded no blocked shots, and preseason goal rates run high (0.097–0.112). Its scoring looks different from the regular season, and it's only ~1,350 shots.
+- **Goals reconcile exactly** (1b), and **no shot is missing coordinates** (2).
+- **Empty-net shots: only 9 in three seasons, all goals.** That's far too few. Most empty-net goals probably still carry a `goalie_id`, so `is_empty_net` is undercounted. Query 5a checks this against the goals' own `is_empty_net` flag. It matters for the training filter and for goalie pulls in strength state.
+- **Shot type.**
+  - Tips are recorded: 3.9% of shots, scoring at 13.6%, the highest rate of any type.
+  - "Default" is 33% of shots, effectively unknown, and scores above average (9.4%). Keep it as its own category. Query 5b checks whether it clusters in certain seasons.
+- **`is_quality_chance` doesn't give away the outcome. It's a location zone.**
+  - Within 30 ft, ~70–75% of shots are flagged.
+  - From 30–45 ft, about half are.
+  - Beyond 45 ft, essentially none. Of 189 goals from beyond 45 ft, only 1 was flagged, so far-out goals aren't flagged after the fact.
+  - Blocked shots carry the flag too ("Quality blocked"), which fits a rule based on location.
+  - Within a distance band, flagged shots score more because the unflagged ones are the wide-angle shots at the same distance.
+  - **Verdict:** not leakage, but redundant with distance and angle. Not a feature; a benchmark: "how much better than the league's own zone is the model?"
+
+## 5. Follow-ups
+
+Prompted by the results above, and input to the strength-state model. Same routine: paste the results back.
+
+### 5a. Empty-net goals: shots vs goal events
+
+`goal_events_empty_net` is the league's own flag on the goal. If it's far above `shots_empty_net`, `fct_shots.is_empty_net` misses most empty nets. `goalie_pulls` counts goalie changes with nobody coming in.
+
+```sql
+with goals as (
+    select
+        season_id,
+        count(*) as goal_events,
+        count_if(is_empty_net) as goal_events_empty_net
+    from dev.dbt_apetry_silver.stg_pwhl__goals
+    where not coalesce(is_penalty_shot, false)
+    group by season_id
+),
+
+shots as (
+    select
+        season_id,
+        count_if(is_goal and is_empty_net) as shots_empty_net
+    from dev.dbt_apetry_gold.fct_shots
+    group by season_id
+),
+
+pulls as (
+    select
+        season_id,
+        count_if(goalie_in_player_id is null) as goalie_pulls,
+        count(*) as goalie_changes
+    from dev.dbt_apetry_silver.stg_pwhl__goalie_changes
+    group by season_id
+)
+
+select
+    '5a' as query,
+    goals.season_id,
+    goals.goal_events,
+    goals.goal_events_empty_net,
+    shots.shots_empty_net,
+    pulls.goalie_pulls,
+    pulls.goalie_changes
+from goals
+left join shots on goals.season_id = shots.season_id
+left join pulls on goals.season_id = pulls.season_id
+order by goals.season_id
+```
+
+### 5b. "Default" shot type by season
+
+```sql
+select
+    '5b' as query,
+    season_id,
+    count(*) as shots_at_goalie,
+    count_if(shot_type = 'Default') as default_type_shots,
+    round(count_if(shot_type = 'Default') / count(*), 3) as default_share
+from dev.dbt_apetry_gold.fct_shots
+where is_unblocked and not is_empty_net
+group by season_id
+order by season_id
+```
+
+### 5c. Players on the ice at goals
+
+Goals list the players on the ice for each side (`plus` / `minus`). If those lists are complete, they give the real skater counts at every goal, a much stronger test for strength state than the power-play flags alone.
+- -1 or empty means the list is missing.
+- The counts may include the goalie; the 5v5 rows will show which.
+- The `is_overtime` rows show whether overtime is played 3-on-3.
+
+```sql
+with goals as (
+    select
+        season_id,
+        is_power_play,
+        is_short_handed,
+        is_empty_net,
+        period > 3 as is_overtime,
+        size(on_ice_for_player_ids) as players_for,
+        size(on_ice_against_player_ids) as players_against
+    from dev.dbt_apetry_silver.stg_pwhl__goals
+    where not coalesce(is_penalty_shot, false)
+)
+
+select
+    '5c' as query,
+    is_overtime,
+    is_power_play,
+    is_short_handed,
+    is_empty_net,
+    players_for,
+    players_against,
+    count(*) as goals
+from goals
+group by is_overtime, is_power_play, is_short_handed, is_empty_net, players_for, players_against
+order by goals desc
+limit 50
+```
+
+### 5d. Penalty profile
+
+Which penalty lengths and classes exist, and which ones the league marks as creating a power play (`is_power_play_penalty`). This decides how strength state treats misconducts, coincidental penalties, and double minors.
+
+```sql
+select
+    '5d' as query,
+    penalty_class,
+    penalty_minutes,
+    is_power_play_penalty,
+    is_penalty_shot,
+    count(*) as penalties
+from dev.dbt_apetry_silver.stg_pwhl__penalties
+group by penalty_class, penalty_minutes, is_power_play_penalty, is_penalty_shot
+order by penalties desc
+limit 50
+```
+
 ## Results
 
 Paste each query's output below, as copied from the results grid.
@@ -468,4 +604,24 @@ query	distance_band	shots_at_goalie	goals	goal_rate	flagged_share	flagged_share_
 4c	30-45 ft	4596	237	0.052	0.466	0.654	0.072	0.033
 4c	45-70 ft	4434	167	0.038	0	0	0	0.038
 4c	70+ ft	622	22	0.035	0.002	0.045	1	0.034
+```
+
+### 5a
+
+```text
+```
+
+### 5b
+
+```text
+```
+
+### 5c
+
+```text
+```
+
+### 5d
+
+```text
 ```

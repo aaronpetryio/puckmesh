@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: draft, awaiting decisions (see [Decisions needed](#decisions-needed)).
+Status: step 1 (audit) done, follow-ups pending; see [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -31,7 +31,16 @@ Status: draft, awaiting decisions (see [Decisions needed](#decisions-needed)).
 
 ### 1. Data audit
 
-Queries: [xg-audit.md](xg-audit.md). Run them in Databricks and paste the results back.
+Queries, results, and findings: [xg-audit.md](xg-audit.md).
+
+- **The audit's answers:**
+  - 18,022 shots at a goalie and 1,476 goals in the regular season and playoffs; preseason is left out of training.
+  - Goals reconcile exactly, and no shot is missing coordinates.
+  - Tips are recorded. "Default" (unknown) is a third of shot types.
+  - `is_quality_chance` is a location zone, not leakage: a benchmark, not a feature.
+  - Empty nets look undercounted (9 shots in three seasons), which follow-up 5a checks.
+
+What the audit looked at:
 
 - Shots and goals per season, and the overall goal rate.
 - How many distinct shot types there are, and whether tips and deflections are recorded.
@@ -54,6 +63,26 @@ Already known:
 
 - Already available: `distance_ft`, `angle_deg`, `shot_type`, `is_rebound`, `seconds_since_team_prev_shot`, `score_diff`, `period`, `is_home_team`.
 - **Strength state (5v5, power play, shorthanded) is missing.** It's the biggest gap. Today only goals carry power-play flags. It would come from a new intermediate model that rebuilds man-advantage from penalties: duration, minors ending early on a power-play goal, offsetting penalties, and goalie pulls from `stg_pwhl__goalie_changes`. Its own PR, with a reconciliation test checking power-play goals against the goals' `is_power_play` flag.
+  - **How others do it:**
+    - fastRhockey, and sportsdataverse's older path, use simple windows. Each penalty the league marks as a power play (`pp`) opens a window of its length, closed by the next goal of any kind. There's no 5v3 or skater count.
+    - sportsdataverse's newer path counts skaters from HockeyTech's shift feed (`modulekit` / `gameshifts`), which we don't fetch. In 2025, 5–8% of its events had implausible counts, and it has no counts for 2024 or 2025 shots.
+    - We take the penalty rebuild, which is more careful than the windows. Shifts stay a fallback if the reconciliation fails.
+  - **Edge cases to handle:**
+    - Which penalties change strength: use the league's `pp` flag on the penalty, which should already exclude coincidental penalties.
+    - Misconducts (10 min) and game misconducts take no one off the ice.
+    - A penalty shot replaces the power play.
+    - Double minors (4 min): a power-play goal ends only the current 2 minutes.
+    - Majors and match penalties: run the full 5 minutes whatever happens.
+    - Two in the box at most: a third penalty waits until the first one ends, so a team never drops below 3 skaters.
+    - On a 5v3 goal, only the penalty that started first ends.
+    - Short-handed goals end nothing.
+    - Penalties carry across period breaks; `game_seconds` already runs on through the game.
+    - Regular-season overtime is 3-on-3, so a penalty adds a skater for the other team (4v3) instead of removing one. Playoff overtime is 5-on-5. Query 5c checks this.
+    - Same-second order: a shot and a penalty in the same second follow `event_index`, not the clock.
+    - Pulled goalies: from `stg_pwhl__goalie_changes`, the team with an empty net counts as 6 skaters. Delayed-penalty pulls probably aren't recorded; that's a known gap.
+  - **Tests:**
+    - Goals' `is_power_play` / `is_short_handed` flags.
+    - The on-ice player lists on each goal, if query 5c shows they're complete. They give real skater counts at every goal.
 - Maybe a rough rush flag (a shot within a few seconds of an event in another zone), if step 1 shows the event timing supports it.
 - Why the features go in dbt: they get tested and documented there, and the ratings and predictions models can reuse them. The Python side reads one table.
 
@@ -89,14 +118,25 @@ Add a scoring step to the daily workflow after dbt. This changes the schedule, s
 
 `ml/xg/` holds plain Python modules for features, training, scoring, and evaluation. Notebooks are only for exploring the audit and plots. Tests go in `tests/`.
 
-## Decisions needed
+## Decisions
 
 These are "ask before" items in CLAUDE.md.
 
-1. **New dependencies:** pandas, scikit-learn, and mlflow, plus lightgbm or xgboost for the comparison. In a separate requirements file, so the extract CI stays lean.
-2. **Gold mart columns:** add `strength_state` (and maybe a rush flag) to `fct_shots`, or keep them in a new intermediate model the ML code reads?
-3. **Predictions table:** schema name and grain. Suggested: one row per shot per model version.
-4. **Step 7:** whether to include the daily workflow change in v1.
+1. **New dependencies (open):**
+   - Proposed: `requirements-ml.txt` with scikit-learn, pandas, and mlflow, installed together with `requirements.txt` only in the jobs that need them.
+   - No LightGBM or XGBoost unless a test shows logistic regression falls short.
+2. **Strength state (agreed in principle):**
+   - The logic goes in a new intermediate model.
+   - `fct_shots` gains `skaters_for`, `skaters_against`, and `strength_state` (e.g. `5v4`).
+   - Edge cases are listed under step 2. Final sign-off on the columns is still needed.
+3. **Predictions table (decided):**
+   - One row per shot per model version, keyed on `game_id, event_index, model_version`.
+   - Written by Python to a new `ml` schema (`dev.ml.xg_predictions`, later `prod.ml.xg_predictions`) and declared as a dbt source.
+   - Creating the prod schema gets asked about again when we reach that step.
+4. **Daily scoring (decided: yes, after model v1):**
+   - The daily run scores new shots with the saved model, so yesterday's games get xG the next morning.
+   - Order: extract → dbt build → score → dbt build of the xG marts.
+   - Training stays manual: when the model changes, or once a season.
 
 ## Positioning
 
