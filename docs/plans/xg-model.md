@@ -31,14 +31,24 @@ Status: draft, awaiting decisions (see [Decisions needed](#decisions-needed)).
 
 ### 1. Data audit
 
-SQL against `fct_shots`, in a notebook or as dbt analyses:
+Queries: [xg-audit.md](xg-audit.md). Run them in Databricks and paste the results back.
 
 - Shots and goals per season, and the overall goal rate.
-- A heatmap of goal locations, to check the rink scale (`rink_net_x`, `rink_units_per_foot`).
 - How many distinct shot types there are, and whether tips and deflections are recorded.
 - **Whether `is_quality_chance` gives away the outcome.** `stg_pwhl__shots` detects goals by matching "goal" in `shot_quality_description`. If the league sets the flag after the result is known, it can't be a feature. Use it as a benchmark instead.
-- Whether blocked-shot coordinates are the shooter's position or the blocker's.
 - Missing coordinates, and empty-net shots.
+- Dropped: whether blocked-shot coordinates are the shooter's position or the blocker's. Blocked shots aren't in the training set.
+
+Already known:
+
+- **Rink scale: done.** `fct_shots` has `x_ft` / `y_ft` / `distance_ft` / `angle_deg` on the fastRhockey convention; see [rink-coordinates.md](rink-coordinates.md).
+- **Shots on goal only.** HockeyTech records no missed shots.
+- **Coordinates are noisy.**
+  - About 1.8% of shots at a goalie (353 of 19,376) sit on the wrong half for their team's period, and they convert at 10.5%. These are scorer placement errors.
+  - About 1.5% of game-periods have the ends swapped.
+  - Shots from 70–89 ft convert at ~3%.
+  - The model has to tolerate this noise.
+- **No strength state on shots.** It has to be rebuilt from penalties and goalie changes (step 2).
 
 ### 2. Features in dbt, not Python
 

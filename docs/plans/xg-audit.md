@@ -1,0 +1,398 @@
+# xG step 1: data audit
+
+Queries for step 1 of the [xG plan](xg-model.md). Run them in the Databricks SQL editor against your dev schemas.
+
+- `fct_shots` is a gold mart: `dev.dbt_apetry_gold`.
+- Staging and base models are in silver: `dev.dbt_apetry_silver`.
+
+Already settled, so not repeated here: the coordinate scale and the swapped-end periods ([rink-coordinates.md](rink-coordinates.md)).
+
+## How to send results
+
+1. Run query 0 first. If it fails or shows nulls, rebuild dev on `main` (`dotenv -f ../.env run -- dbt build --select fct_shots+` from `transform/`), then continue.
+2. Run each query. Copy the result grid with its headers: select all in the grid, then copy, which gives tab-separated text.
+3. Paste them all into one chat message, in any order.
+   - Each result starts with a `query` column (`1a`, `4c`, ...), so the tables label themselves.
+   - If a query fails, paste the error instead.
+
+Alternatively, paste them into [Results](#results) at the bottom and commit, so the output stays next to the queries.
+
+Every query returns aggregates only, under ~50 rows, with rates rounded to 3 decimals.
+
+Definitions used throughout:
+
+- **Shot at a goalie:** an unblocked shot with a goalie in net (`is_unblocked and not is_empty_net`). This is the xG model's population.
+- **Goal rate:** goals / shots at a goalie.
+
+## 0. Preflight: does dev have the coordinate fix?
+
+`x_ft` only exists after the fix (PR #11). If this errors on `x_ft`, or `missing_distance` isn't close to 0, rebuild dev first.
+
+```sql
+select
+    '0' as query,
+    count(*) as shots,
+    count_if(is_unblocked) as unblocked_shots,
+    count_if(is_unblocked and distance_ft is null) as missing_distance,
+    round(min(x_ft), 1) as min_x_ft,
+    round(max(x_ft), 1) as max_x_ft
+from dev.dbt_apetry_gold.fct_shots
+```
+
+## 1. Volume
+
+### 1a. Shots and goals per season
+
+How much data the model has, and the goal rate per season. Expect a goal rate around 0.08–0.10 for shots on goal; a season far off that suggests a data problem.
+
+```sql
+with shots as (
+    select
+        season_id,
+        season_type,
+        shot_result,
+        is_goal,
+        is_unblocked,
+        is_empty_net
+    from dev.dbt_apetry_gold.fct_shots
+),
+
+seasons as (
+    select
+        season_id,
+        season_name
+    from dev.dbt_apetry_silver.stg_pwhl__seasons
+),
+
+per_season as (
+    select
+        season_id,
+        season_type,
+        count(*) as shots,
+        count_if(shot_result = 'blocked') as blocked_shots,
+        count_if(is_unblocked) as unblocked_shots,
+        count_if(is_goal) as goals,
+        count_if(is_empty_net) as empty_net_shots,
+        count_if(is_empty_net and is_goal) as empty_net_goals,
+        count_if(is_unblocked and not is_empty_net) as shots_at_goalie,
+        count_if(is_goal and not is_empty_net) as goals_at_goalie
+    from shots
+    group by season_id, season_type
+)
+
+select
+    '1a' as query,
+    per_season.season_id,
+    seasons.season_name,
+    per_season.season_type,
+    per_season.shots,
+    per_season.blocked_shots,
+    per_season.unblocked_shots,
+    per_season.goals,
+    per_season.empty_net_shots,
+    per_season.empty_net_goals,
+    per_season.shots_at_goalie,
+    per_season.goals_at_goalie,
+    round(per_season.goals_at_goalie / nullif(per_season.shots_at_goalie, 0), 3) as goal_rate
+from per_season
+left join seasons on per_season.season_id = seasons.season_id
+order by per_season.season_id
+```
+
+### 1b. Do goals and goal shots agree?
+
+Checks whether every goal event has a shot marked as a goal, matched on `goal_id`. Penalty-shot goals are left out because they're a separate event type. Goals with no matching shot would make the goal rate too low.
+
+- `goal_events` should equal `shots_marked_goal`.
+- `goal_events_without_shot` should be 0.
+- `goal_shots_without_goal_id` counts shots marked as goals only because their description contains "goal" (see 4a).
+
+```sql
+with goals as (
+    select
+        season_id,
+        game_id,
+        goal_id
+    from dev.dbt_apetry_silver.stg_pwhl__goals
+    where not coalesce(is_penalty_shot, false)
+),
+
+goal_shots as (
+    select
+        season_id,
+        game_id,
+        goal_id
+    from dev.dbt_apetry_gold.fct_shots
+    where is_goal
+),
+
+goals_matched as (
+    select
+        goals.season_id,
+        -- Distinct, in case two shots carry the same goal_id.
+        count(distinct goals.game_id, goals.goal_id) as goal_events,
+        count_if(goal_shots.goal_id is null) as goal_events_without_shot
+    from goals
+    left join goal_shots
+        on goals.game_id = goal_shots.game_id
+        and goals.goal_id = goal_shots.goal_id
+    group by goals.season_id
+),
+
+shots_counted as (
+    select
+        season_id,
+        count(*) as shots_marked_goal,
+        count_if(goal_id is null) as goal_shots_without_goal_id
+    from goal_shots
+    group by season_id
+)
+
+select
+    '1b' as query,
+    coalesce(goals_matched.season_id, shots_counted.season_id) as season_id,
+    coalesce(goals_matched.goal_events, 0) as goal_events,
+    coalesce(shots_counted.shots_marked_goal, 0) as shots_marked_goal,
+    coalesce(goals_matched.goal_events_without_shot, 0) as goal_events_without_shot,
+    coalesce(shots_counted.goal_shots_without_goal_id, 0) as goal_shots_without_goal_id
+from goals_matched
+full outer join shots_counted on goals_matched.season_id = shots_counted.season_id
+order by season_id
+```
+
+## 2. Missing coordinates
+
+Shots with no location, or a `(0, 0)` placeholder, per season and result. Without a location, a shot has no distance or angle.
+
+```sql
+select
+    '2' as query,
+    season_id,
+    shot_result,
+    count(*) as shots,
+    count_if(x_location is null or y_location is null) as missing_xy,
+    count_if(x_location = 0 and y_location = 0) as zero_xy,
+    count_if(distance_ft is null) as missing_distance
+from dev.dbt_apetry_gold.fct_shots
+group by season_id, shot_result
+order by season_id, shot_result
+```
+
+## 3. Shot types
+
+Which shot types exist and how often each scores. `looks_like_tip` flags types that mention tips, deflections, or redirects. If none do, tips aren't recorded, and a tip shows up as an ordinary shot from close in.
+
+```sql
+with shots as (
+    select
+        shot_type,
+        is_goal
+    from dev.dbt_apetry_gold.fct_shots
+    where is_unblocked and not is_empty_net
+),
+
+totals as (
+    select count(*) as all_shots
+    from shots
+),
+
+per_type as (
+    select
+        shot_type,
+        count(*) as shots_at_goalie,
+        count_if(is_goal) as goals
+    from shots
+    group by shot_type
+)
+
+select
+    '3' as query,
+    per_type.shot_type,
+    per_type.shots_at_goalie,
+    round(per_type.shots_at_goalie / totals.all_shots, 3) as share_of_shots,
+    per_type.goals,
+    round(per_type.goals / per_type.shots_at_goalie, 3) as goal_rate,
+    coalesce(lower(per_type.shot_type) rlike 'tip|deflect|redirect', false) as looks_like_tip
+from per_type
+cross join totals
+order by per_type.shots_at_goalie desc
+```
+
+## 4. Does `is_quality_chance` give away the outcome?
+
+`stg_pwhl__shots` reads both the quality flag (`ilike 'quality%'`) and part of the goal detection (`ilike '%goal%'`) from the same field, `shot_quality_description`. If the league fills that field in after it knows the result, the flag leaks the outcome. In that case it can be a benchmark only, never a feature.
+
+### 4a. What the field actually holds
+
+Every raw value, and whether the event also carries a `game_goal_id`.
+
+```sql
+with events as (
+    select
+        event_type,
+        event:shot_quality_description::string as shot_quality_description,
+        nullif(event:game_goal_id::string, '') is not null as has_game_goal_id
+    from dev.dbt_apetry_silver.base_pwhl__play_by_play_events
+    where event_type in ('shot', 'blocked_shot')
+)
+
+select
+    '4a' as query,
+    event_type,
+    shot_quality_description,
+    has_game_goal_id,
+    count(*) as events
+from events
+group by event_type, shot_quality_description, has_game_goal_id
+order by event_type, events desc
+```
+
+### 4b. Goal rate, flagged vs not
+
+`share_of_goals` is the share of all goals at a goalie that fall in each group. A row with an empty `is_quality_chance` means the description was missing; 4c counts those as unflagged. If flagged shots hold nearly every goal (say over 0.9) while being a minority of shots, the flag is probably set after the fact.
+
+```sql
+with shots as (
+    select
+        is_quality_chance,
+        is_goal
+    from dev.dbt_apetry_gold.fct_shots
+    where is_unblocked and not is_empty_net
+),
+
+totals as (
+    select
+        count(*) as all_shots,
+        count_if(is_goal) as all_goals
+    from shots
+),
+
+per_flag as (
+    select
+        is_quality_chance,
+        count(*) as shots_at_goalie,
+        count_if(is_goal) as goals
+    from shots
+    group by is_quality_chance
+)
+
+select
+    '4b' as query,
+    per_flag.is_quality_chance,
+    per_flag.shots_at_goalie,
+    round(per_flag.shots_at_goalie / totals.all_shots, 3) as share_of_shots,
+    per_flag.goals,
+    round(per_flag.goals / totals.all_goals, 3) as share_of_goals,
+    round(per_flag.goals / per_flag.shots_at_goalie, 3) as goal_rate
+from per_flag
+cross join totals
+order by per_flag.is_quality_chance
+```
+
+### 4c. By distance band
+
+This is the deciding check.
+
+- **An honest flag** is about where the shot came from. Its share should drop with distance, and within a band, flagged and unflagged shots should score at fairly similar rates.
+- **A leaky flag** follows the result. Far-out shots that happened to score get flagged, so `goal_rate_flagged` stays high even at 45–70 ft and 70+ ft.
+
+```sql
+with shots as (
+    select
+        -- A missing description counts as not flagged (4b shows how many there are).
+        coalesce(is_quality_chance, false) as is_quality_chance,
+        is_goal,
+        case
+            when distance_ft < 10 then 1
+            when distance_ft < 20 then 2
+            when distance_ft < 30 then 3
+            when distance_ft < 45 then 4
+            when distance_ft < 70 then 5
+            else 6
+        end as band_order,
+        case
+            when distance_ft < 10 then '00-10 ft'
+            when distance_ft < 20 then '10-20 ft'
+            when distance_ft < 30 then '20-30 ft'
+            when distance_ft < 45 then '30-45 ft'
+            when distance_ft < 70 then '45-70 ft'
+            else '70+ ft'
+        end as distance_band
+    from dev.dbt_apetry_gold.fct_shots
+    where
+        is_unblocked
+        and not is_empty_net
+        and distance_ft is not null
+),
+
+per_band as (
+    select
+        band_order,
+        distance_band,
+        count(*) as shots_at_goalie,
+        count_if(is_goal) as goals,
+        count_if(is_quality_chance) as flagged_shots,
+        count_if(is_quality_chance and is_goal) as flagged_goals,
+        count_if(not is_quality_chance) as unflagged_shots,
+        count_if(not is_quality_chance and is_goal) as unflagged_goals
+    from shots
+    group by band_order, distance_band
+)
+
+select
+    '4c' as query,
+    distance_band,
+    shots_at_goalie,
+    goals,
+    round(goals / shots_at_goalie, 3) as goal_rate,
+    round(flagged_shots / shots_at_goalie, 3) as flagged_share,
+    round(flagged_goals / nullif(goals, 0), 3) as flagged_share_of_goals,
+    round(flagged_goals / nullif(flagged_shots, 0), 3) as goal_rate_flagged,
+    round(unflagged_goals / nullif(unflagged_shots, 0), 3) as goal_rate_unflagged
+from per_band
+order by band_order
+```
+
+## Results
+
+Paste each query's output below, as copied from the results grid.
+
+### 0
+
+```text
+```
+
+### 1a
+
+```text
+```
+
+### 1b
+
+```text
+```
+
+### 2
+
+```text
+```
+
+### 3
+
+```text
+```
+
+### 4a
+
+```text
+```
+
+### 4b
+
+```text
+```
+
+### 4c
+
+```text
+```
