@@ -360,39 +360,112 @@ Paste each query's output below, as copied from the results grid.
 ### 0
 
 ```text
+query	shots	unblocked_shots	missing_distance	min_x_ft	max_x_ft
+0	26544	19385	0	-69.7	97.7
 ```
 
 ### 1a
 
 ```text
+query	season_id	season_name	season_type	shots	blocked_shots	unblocked_shots	goals	empty_net_shots	empty_net_goals	shots_at_goalie	goals_at_goalie	goal_rate
+1a	1	2024 Regular Season	regular	5083	925	4158	341	1	1	4157	340	0.082
+1a	2	2024 Preseason	preseason	594	0	594	59	0	0	594	59	0.099
+1a	3	2024 Playoffs	playoffs	1082	318	764	44	2	2	762	42	0.055
+1a	4	2024-25 Preseason	preseason	474	136	338	38	0	0	338	38	0.112
+1a	5	2024-25 Regular Season	regular	6986	2072	4914	441	2	2	4912	439	0.089
+1a	6	2025 Playoffs	playoffs	1114	357	757	58	0	0	757	58	0.077
+1a	7	2025-26 Preseason	preseason	576	154	422	41	0	0	422	41	0.097
+1a	8	2025-26 Regular Season	regular	9584	2873	6711	549	3	3	6708	546	0.081
+1a	9	2026 Playoffs	playoffs	1051	324	727	52	1	1	726	51	0.07
 ```
 
 ### 1b
 
 ```text
+query	season_id	goal_events	shots_marked_goal	goal_events_without_shot	goal_shots_without_goal_id
+1b	1	341	341	0	0
+1b	2	59	59	0	0
+1b	3	44	44	0	0
+1b	4	38	38	0	0
+1b	5	441	441	0	0
+1b	6	58	58	0	0
+1b	7	41	41	0	0
+1b	8	549	549	0	0
+1b	9	52	52	0	0
 ```
 
 ### 2
 
 ```text
+query	season_id	shot_result	shots	missing_xy	zero_xy	missing_distance
+2	1	blocked	925	0	0	0
+2	1	goal	341	0	0	0
+2	1	on_net	3817	0	0	0
+2	2	goal	59	0	0	0
+2	2	on_net	535	0	0	0
+2	3	blocked	318	0	0	0
+2	3	goal	44	0	0	0
+2	3	on_net	720	0	0	0
+2	4	blocked	136	0	0	0
+2	4	goal	38	0	0	0
+2	4	on_net	300	0	0	0
+2	5	blocked	2072	0	0	0
+2	5	goal	441	0	0	0
+2	5	on_net	4473	0	0	0
+2	6	blocked	357	0	0	0
+2	6	goal	58	0	0	0
+2	6	on_net	699	0	0	0
+2	7	blocked	154	0	0	0
+2	7	goal	41	0	0	0
+2	7	on_net	381	0	0	0
+2	8	blocked	2873	0	0	0
+2	8	goal	549	0	0	0
+2	8	on_net	6162	0	0	0
+2	9	blocked	324	0	0	0
+2	9	goal	52	0	0	0
+2	9	on_net	675	0	0	0
 ```
 
 ### 3
 
 ```text
+query	shot_type	shots_at_goalie	share_of_shots	goals	goal_rate	looks_like_tip
+3	Wrist	8307	0.429	577	0.069	false
+3	Default	6400	0.33	603	0.094	false
+3	Snap	1886	0.097	169	0.09	false
+3	Backhand	1172	0.06	101	0.086	false
+3	Slap	855	0.044	61	0.071	false
+3	Tip	756	0.039	103	0.136	true
 ```
 
 ### 4a
 
 ```text
+query	event_type	shot_quality_description	has_game_goal_id	events
+4a	blocked_shot	Non quality blocked	false	4971
+4a	blocked_shot	Quality blocked	false	2188
+4a	shot	Non quality on net	false	9557
+4a	shot	Quality on net	false	8205
+4a	shot	Quality goal	true	1137
+4a	shot	Non quality goal	true	486
 ```
 
 ### 4b
 
 ```text
+query	is_quality_chance	shots_at_goalie	share_of_shots	goals	share_of_goals	goal_rate
+4b	false	10036	0.518	479	0.297	0.048
+4b	true	9340	0.482	1135	0.703	0.122
 ```
 
 ### 4c
 
 ```text
+query	distance_band	shots_at_goalie	goals	goal_rate	flagged_share	flagged_share_of_goals	goal_rate_flagged	goal_rate_unflagged
+4c	00-10 ft	1957	325	0.166	0.711	0.778	0.182	0.127
+4c	10-20 ft	4322	554	0.128	0.749	0.816	0.14	0.094
+4c	20-30 ft	3445	309	0.09	0.744	0.887	0.107	0.04
+4c	30-45 ft	4596	237	0.052	0.466	0.654	0.072	0.033
+4c	45-70 ft	4434	167	0.038	0	0	0	0.038
+4c	70+ ft	622	22	0.035	0.002	0.045	1	0.034
 ```
