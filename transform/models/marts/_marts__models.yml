@@ -262,9 +262,13 @@ models:
       - name: is_home_team
         description: The shooting team is the home team.
       - name: goalie_player_id
-        description: Goalie the shot was against. Null when the net was empty.
+        description: >
+          Goalie the shot was against, as recorded on the shot. Empty-net goals usually still
+          name the pulled goalie, so use is_empty_net to find them.
       - name: is_empty_net
-        description: An unblocked shot with no goalie in net.
+        description: >
+          The shot was a goal into an empty net, from the league's own flag on the goal.
+          False for every other shot: a shot on goal at an empty net always scores.
       - name: blocker_player_id
         description: Player who blocked the shot. Null unless blocked.
       - name: shot_result

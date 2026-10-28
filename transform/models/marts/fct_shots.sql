@@ -24,7 +24,7 @@ select
     shots.defending_team_id,
     shots.is_home_team,
     shots.goalie_player_id,
-    shots.goalie_player_id is null and shots.shot_result != 'blocked' as is_empty_net,
+    shots.is_empty_net,
     shots.blocker_player_id,
 
     shots.shot_result,

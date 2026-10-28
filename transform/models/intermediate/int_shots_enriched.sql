@@ -8,7 +8,9 @@ goals as (
     select
         game_id,
         event_index,
-        scoring_team_id
+        goal_id,
+        scoring_team_id,
+        is_empty_net
     from {{ ref('stg_pwhl__goals') }}
 ),
 
@@ -20,8 +22,23 @@ games as (
     from {{ ref('stg_pwhl__games') }}
 ),
 
+flagged as (
+    -- HockeyTech flags an empty net only on the goal event; the shot event usually still
+    -- names the pulled goalie, so a missing goalie_player_id finds ~1 in 10 empty-net goals
+    -- (docs/plans/xg-audit.md, query 5a). A shot on goal at an empty net always scores,
+    -- so only goals can be empty-net shots.
+    select
+        shots.*,
+        shots.shot_result = 'goal' and coalesce(goals.is_empty_net, false) as is_empty_net
+    from shots
+    left join goals
+        on shots.game_id = goals.game_id
+        and shots.goal_id = goals.goal_id
+),
+
 attack_side as (
-    -- The end each team attacked in each game-period, from its shots with a goalie in net.
+    -- The end each team attacked in each game-period, from its unblocked shots other than
+    -- empty-net goals.
     -- HockeyTech draws the home team attacking left, but scorers swapped the ends for whole
     -- periods in ~1.5% of game-periods (game 3, periods 1 and 3, matches the league's own
     -- shot chart), so empty-net shots use this rather than home/away.
@@ -32,10 +49,10 @@ attack_side as (
         avg(
             case when x_location < {{ var('rink_center_x') }} then 1.0 else 0.0 end
         ) >= 0.5 as attacks_left
-    from shots
+    from flagged
     where
         shot_result != 'blocked'
-        and goalie_player_id is not null
+        and not is_empty_net
     group by game_id, period, shooting_team_id
 ),
 
@@ -56,25 +73,25 @@ score_state as (
 
 located as (
     select
-        shots.*,
+        flagged.*,
         case
-            when shots.shooting_team_id = games.home_team_id then games.away_team_id
+            when flagged.shooting_team_id = games.home_team_id then games.away_team_id
             else games.home_team_id
         end as defending_team_id,
         -- A shot at a goalie is aimed at the nearer net. An empty-net shot can come from
         -- the shooter's own end, so it's aimed at the end its team attacked that period,
         -- falling back to home-attacks-left when the team has no other shots to go on.
         case
-            when shots.goalie_player_id is null and shots.shot_result != 'blocked'
-                then coalesce(attack_side.attacks_left, shots.is_home_team)
-            else shots.x_location < {{ var('rink_center_x') }}
+            when flagged.is_empty_net
+                then coalesce(attack_side.attacks_left, flagged.is_home_team)
+            else flagged.x_location < {{ var('rink_center_x') }}
         end as is_toward_left_net
-    from shots
-    inner join games on shots.game_id = games.game_id
+    from flagged
+    inner join games on flagged.game_id = games.game_id
     left join attack_side
-        on shots.game_id = attack_side.game_id
-        and shots.period = attack_side.period
-        and shots.shooting_team_id = attack_side.shooting_team_id
+        on flagged.game_id = attack_side.game_id
+        and flagged.period = attack_side.period
+        and flagged.shooting_team_id = attack_side.shooting_team_id
 ),
 
 positioned as (
