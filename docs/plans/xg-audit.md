@@ -801,9 +801,56 @@ query	penalty_class	penalty_minutes	is_power_play_penalty	is_penalty_shot	is_ben
 ### 6a
 
 ```text
+query	our_state	listed_state	is_power_play	is_short_handed	is_empty_net	is_overtime	goals
+6a	5v6	5v5	false	false	false	false	11
+6a	5v5	5v4	true	false	false	false	10
+6a	5v5	6v5	false	false	false	false	7
+6a	6v5	5v5	false	false	false	false	7
+6a	5v4	5v5	false	false	false	false	5
+6a	5v5	3v3	false	false	false	true	4
+6a	5v4	5v5	true	false	false	false	4
+6a	5v5	4v5	false	true	false	false	3
+6a	5v4	6v4	true	false	false	false	2
+6a	5v4	5v3	true	false	false	false	2
+6a	6v4	5v4	true	false	false	false	2
+6a	4v3	5v4	true	false	false	false	2
+6a	5v5	5v4	false	false	false	false	2
+6a	4v5	5v5	false	false	false	false	1
+6a	4v6	5v6	false	true	true	false	1
+6a	5v5	5v6	false	false	false	false	1
+6a	5v5	6v6	false	false	false	false	1
+6a	3v3	4v4	false	false	false	true	1
+6a	5v5	4v4	false	false	false	false	1
+6a	5v4	4v3	true	false	false	true	1
+6a	4v5	4v4	false	false	false	false	1
+6a	3v4	4v5	false	true	false	false	1
+6a	5v5	3v5	false	false	false	false	1
+6a	5v6	6v4	false	false	true	false	1
+6a	6v3	5v3	true	false	false	false	1
+6a	5v4	3v5	true	false	false	false	1
+6a	5v6	5v5	false	false	true	false	1
+6a	5v5	6v5	true	false	false	false	1
+6a	6v6	5v5	false	false	false	false	1
+6a	4v6	4v5	false	true	true	false	1
 ```
 
 ### 6b
 
 ```text
+query	strength_state	shots_at_goalie	goals	goal_rate
+6b	5v5	15106	1071	0.071
+6b	5v4	2657	287	0.108
+6b	4v5	377	37	0.098
+6b	6v5	370	40	0.108
+6b	3v3	304	43	0.141
+6b	4v4	176	10	0.057
+6b	5v6	85	11	0.129
+6b	5v3	76	14	0.184
+6b	4v3	65	9	0.138
+6b	6v4	48	3	0.063
+6b	3v4	14	2	0.143
+6b	6v6	8	1	0.125
+6b	6v3	3	1	0.333
+6b	3v5	1	0	0
+6b	4v6	1	0	0
 ```
