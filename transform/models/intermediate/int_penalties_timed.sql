@@ -13,29 +13,61 @@ goals as (
     where is_power_play
 ),
 
-counted as (
-    -- Penalties that take a skater off the ice (docs/plans/xg-model.md, step 2). Coincidental
-    -- minors create no power play but still do (4-on-4); coincidental majors (fights) are
-    -- replaced on the ice. Misconducts and penalty-shot penalties never change strength,
-    -- whatever their pp flag says.
+stoppages as (
+    -- What else was called at the same moment, which decides whether coincidental
+    -- penalties are served short-handed or replaced on the ice.
     select
-        league_id,
         game_id,
-        season_id,
-        event_index,
         game_seconds,
-        penalty_id,
-        penalized_team_id,
-        coalesce(served_by_player_id, penalized_player_id) as serving_player_id,
-        penalty_class = 'Minor' as is_minor,
-        is_power_play_penalty,
-        (penalty_minutes * 60)::int as duration_seconds
+        -- Misconducts sometimes carry the pp flag but never change strength.
+        count_if(is_power_play_penalty and penalty_class != 'Misconduct') > 0
+            as has_power_play_penalty,
+        count(distinct case when penalty_class in ('Major', 'Match') then penalized_team_id end)
+        > 1 as has_offsetting_majors
     from penalties
+    where not coalesce(is_penalty_shot, false)
+    group by game_id, game_seconds
+),
+
+counted as (
+    -- Penalties that take a skater off the ice (docs/plans/xg-model.md, step 2; checked
+    -- against the on-ice lists in xg-audit.md, 6c):
+    -- - A minor with the pp flag always does.
+    -- - Coincidental minors (no pp flag) give 4-on-4, unless a power-play penalty was called
+    --   at the same moment; then they're replaced on the ice.
+    -- - Majors and match penalties always do, whatever the pp flag says (a major with a game
+    --   misconduct often has none), unless the other team got one at the same moment (a
+    --   fight), when both are replaced.
+    -- - Misconducts and penalty-shot penalties never do.
+    select
+        penalties.league_id,
+        penalties.game_id,
+        penalties.season_id,
+        penalties.event_index,
+        penalties.game_seconds,
+        penalties.penalty_id,
+        penalties.penalized_team_id,
+        coalesce(
+            penalties.served_by_player_id, penalties.penalized_player_id
+        ) as serving_player_id,
+        penalties.penalty_class = 'Minor' as is_minor,
+        penalties.is_power_play_penalty,
+        (penalties.penalty_minutes * 60)::int as duration_seconds
+    from penalties
+    inner join stoppages
+        on penalties.game_id = stoppages.game_id
+        and penalties.game_seconds = stoppages.game_seconds
     where
-        not coalesce(is_penalty_shot, false)
+        not coalesce(penalties.is_penalty_shot, false)
         and (
-            penalty_class = 'Minor'
-            or (penalty_class in ('Major', 'Match') and is_power_play_penalty)
+            (
+                penalties.penalty_class = 'Minor'
+                and (penalties.is_power_play_penalty or not stoppages.has_power_play_penalty)
+            )
+            or (
+                penalties.penalty_class in ('Major', 'Match')
+                and not stoppages.has_offsetting_majors
+            )
         )
 ),
 

@@ -3,17 +3,18 @@ version: 2
 models:
   - name: int_penalties_timed
     description: >
-      One row per penalty that takes a skater off the ice, with when it starts and ends.
-      Rules (docs/plans/xg-model.md, step 2): minors always count, so coincidental minors
-      give 4-on-4; majors and match penalties count only when they create a power play;
-      misconducts and penalty-shot penalties never count. A goal the league marks as a
-      power-play goal ends the minor that started first among those the other team is
-      serving; majors and coincidental minors run their full time. A double minor (two
-      2-minute minors on one player at once) is served back to back. Approximations: a
-      third penalty while two are in the box doesn't wait its turn; a third stacked minor
-      starts with the second; a third power-play goal against three minors at once may
-      leave one running; and when a double minor's second part and another minor are both
-      running, a goal may end the other one first.
+      One row per penalty that takes a skater off the ice, with when it starts and ends. Rules
+      (docs/plans/xg-model.md, step 2): minors with the pp flag count; coincidental minors
+      give 4-on-4, unless a power-play penalty was called at the same moment, when they're
+      replaced; majors and match penalties count unless the other team got one at the same
+      moment (a fight); misconducts and penalty-shot penalties never count. A goal the league
+      marks as a power-play goal ends the minor that started first among those the other team
+      is serving; majors and coincidental minors run their full time. A double minor (two
+      2-minute minors on one player at once) is served back to back. Approximations: a third
+      penalty while two are in the box doesn't wait its turn; a third stacked minor starts
+      with the second; a third power-play goal against three minors at once may leave one
+      running; and when a double minor's second part and another minor are both running, a
+      goal may end the other one first.
     columns:
       - name: penalty_id
         data_tests: [unique, not_null]
@@ -257,8 +258,9 @@ unit_tests:
     description: >
       A power-play goal ends a minor; a major and coincidental minors run their full time;
       a double minor runs back to back, the goal in its first half starting the second;
-      two goals on a 5-on-3 end both minors; misconducts, penalty-shot penalties and
-      fighting majors are dropped.
+      two goals on a 5-on-3 end both minors; a major without the pp flag still counts;
+      misconducts, penalty-shot penalties, fighting majors and coincidental minors called
+      with a power-play minor are dropped.
     model: int_penalties_timed
     given:
       - input: ref('stg_pwhl__penalties')
@@ -296,9 +298,30 @@ unit_tests:
           - {game_id: 1, event_index: 61, game_seconds: 2100, penalty_id: 10,
              penalized_team_id: 20, penalized_player_id: 1, penalty_class: Minor,
              penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: true}
+          # A fight: majors on both teams at once are replaced on the ice.
           - {game_id: 1, event_index: 62, game_seconds: 2200, penalty_id: 11,
              penalized_team_id: 20, penalized_player_id: 1, penalty_class: Major,
              penalty_minutes: 5.00, is_power_play_penalty: false, is_penalty_shot: false}
+          - {game_id: 1, event_index: 63, game_seconds: 2200, penalty_id: 15,
+             penalized_team_id: 10, penalized_player_id: 5, penalty_class: Major,
+             penalty_minutes: 5.00, is_power_play_penalty: false, is_penalty_shot: false}
+          # A major with a game misconduct and no pp flag still counts.
+          - {game_id: 1, event_index: 70, game_seconds: 2400, penalty_id: 16,
+             penalized_team_id: 20, penalized_player_id: 6, penalty_class: Major,
+             penalty_minutes: 5.00, is_power_play_penalty: false, is_penalty_shot: false}
+          - {game_id: 1, event_index: 71, game_seconds: 2400, penalty_id: 17,
+             penalized_team_id: 20, penalized_player_id: 6, penalty_class: Misconduct,
+             penalty_minutes: 10.00, is_power_play_penalty: false, is_penalty_shot: false}
+          # Coincidental minors called with a power-play minor are replaced on the ice.
+          - {game_id: 1, event_index: 80, game_seconds: 2800, penalty_id: 18,
+             penalized_team_id: 20, penalized_player_id: 2, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 81, game_seconds: 2800, penalty_id: 19,
+             penalized_team_id: 20, penalized_player_id: 3, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: false, is_penalty_shot: false}
+          - {game_id: 1, event_index: 82, game_seconds: 2800, penalty_id: 20,
+             penalized_team_id: 10, penalized_player_id: 4, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: false, is_penalty_shot: false}
           # Game 2: a double minor's second part and another minor both running when a
           # goal comes. The goal ends one penalty, not both.
           - {game_id: 2, event_index: 15, game_seconds: 140, penalty_id: 12,
@@ -352,3 +375,7 @@ unit_tests:
            end_game_seconds: 270, ended_by_goal_event_index: null}
         - {penalty_id: 14, start_event_index: 20, start_game_seconds: 160,
            end_game_seconds: 280, ended_by_goal_event_index: 22}
+        - {penalty_id: 16, start_event_index: 70, start_game_seconds: 2400,
+           end_game_seconds: 2700, ended_by_goal_event_index: null}
+        - {penalty_id: 18, start_event_index: 80, start_game_seconds: 2800,
+           end_game_seconds: 2920, ended_by_goal_event_index: null}

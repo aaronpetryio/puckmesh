@@ -79,7 +79,9 @@ attack_side as (
 
 penalty_counts as (
     -- Penalties being served at each shot, by team. A penalty covers the events after it
-    -- was called and before it ends: its time running out, or the goal that ended it.
+    -- was called and before it ends: its time running out, or the goal that ended it. A
+    -- shot in the same second as the call doesn't count it: the play was already on, and the
+    -- on-ice lists agree (xg-audit.md, 6c).
     select
         flagged.game_id,
         flagged.event_index,
@@ -89,7 +91,7 @@ penalty_counts as (
     inner join penalties
         on flagged.game_id = penalties.game_id
         and flagged.event_index > penalties.start_event_index
-        and flagged.game_seconds >= penalties.start_game_seconds
+        and flagged.game_seconds > penalties.start_game_seconds
         and flagged.game_seconds < penalties.end_game_seconds
         and (
             penalties.ended_by_goal_event_index is null
