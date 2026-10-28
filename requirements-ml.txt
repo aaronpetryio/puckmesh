@@ -1,0 +1,6 @@
+# Model training and scoring (ml/). Install together with requirements.txt so pip picks
+# versions of shared packages that fit both:
+#   pip install -r requirements.txt -r requirements-ml.txt
+# The Databricks runtime already ships these, so notebooks/ needs no install there.
+pandas>=2.2
+scikit-learn>=1.5

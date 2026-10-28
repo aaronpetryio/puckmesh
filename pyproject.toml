@@ -37,6 +37,9 @@ convention = "google"
 # The command line entry point is where printing to the terminal belongs.
 "extract/__main__.py" = ["T20"]
 "tests/**" = ["S101", "D", "ANN"]
+# Databricks notebooks in source format: the runtime provides spark, display and
+# dbutils; the first markdown cell stands in for a module docstring; print is output.
+"notebooks/**" = ["F821", "D100", "T20", "E402"]
 
 [tool.ruff.format]
 # Ruff's formatter is Black-compatible (dbt Labs recommends Black + Ruff).

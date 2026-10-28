@@ -102,6 +102,13 @@ Already known:
 
 ### 3. Training set and baselines
 
+**Built:**
+- **Code:** `ml/xg/` (training set query, forward-chaining season folds, four baselines, metrics).
+- **Notebook:** `notebooks/xg_baselines.py`, which shows the data, the baselines, calibration, an xG map, and the shots where the model and reality disagree.
+- **Running it:** in Databricks, through a Git folder. The scheduled pipeline never runs the notebook; daily scoring (step 7) will call the same modules from GitHub Actions.
+- **Results:** to be filled in once the notebook has run.
+
+
 - Train on unblocked, non-empty-net shots in regulation and overtime. Leave out shootouts and penalty shots, which are already separate event types.
 - Baselines to beat: league-average goal rate, then distance only, then distance + angle (roughly the 18 Skaters model [1]).
 
