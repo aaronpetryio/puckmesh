@@ -1,0 +1,212 @@
+with penalties as (
+    select * from {{ ref('stg_pwhl__penalties') }}
+),
+
+goals as (
+    -- Only goals the league marks as power-play goals end a penalty early.
+    select
+        game_id,
+        event_index,
+        game_seconds,
+        scoring_team_id
+    from {{ ref('stg_pwhl__goals') }}
+    where is_power_play
+),
+
+counted as (
+    -- Penalties that take a skater off the ice (docs/plans/xg-model.md, step 2). Coincidental
+    -- minors create no power play but still do (4-on-4); coincidental majors (fights) are
+    -- replaced on the ice. Misconducts and penalty-shot penalties never change strength,
+    -- whatever their pp flag says.
+    select
+        league_id,
+        game_id,
+        season_id,
+        event_index,
+        game_seconds,
+        penalty_id,
+        penalized_team_id,
+        coalesce(served_by_player_id, penalized_player_id) as serving_player_id,
+        penalty_class = 'Minor' as is_minor,
+        is_power_play_penalty,
+        cast(penalty_minutes * 60 as int) as duration_seconds
+    from penalties
+    where
+        not coalesce(is_penalty_shot, false)
+        and (
+            penalty_class = 'Minor'
+            or (penalty_class in ('Major', 'Match') and is_power_play_penalty)
+        )
+),
+
+numbered as (
+    -- A double minor is recorded as two 2-minute minors on one player at the same moment,
+    -- served back to back. Parts after the first start when the first one ends.
+    select
+        *,
+        row_number() over (
+            partition by game_id, penalized_team_id, serving_player_id, game_seconds, is_minor
+            order by event_index
+        ) as part_number,
+        first_value(penalty_id) over (
+            partition by game_id, penalized_team_id, serving_player_id, game_seconds, is_minor
+            order by event_index
+        ) as first_part_penalty_id
+    from counted
+),
+
+first_parts as (
+    select
+        league_id,
+        game_id,
+        season_id,
+        penalty_id,
+        penalized_team_id,
+        is_power_play_penalty,
+        duration_seconds,
+        is_minor and is_power_play_penalty as can_end_early,
+        event_index as start_event_index,
+        game_seconds as start_game_seconds,
+        game_seconds + duration_seconds as end_game_seconds
+    from numbered
+    where not is_minor or part_number = 1
+),
+
+first_pass_picks as (
+    -- Each power-play goal ends the minor, among those the other team is serving, that
+    -- started first.
+    select
+        first_parts.penalty_id,
+        goals.event_index as goal_event_index
+    from goals
+    inner join first_parts
+        on goals.game_id = first_parts.game_id
+        and goals.scoring_team_id != first_parts.penalized_team_id
+        and goals.event_index > first_parts.start_event_index
+        and goals.game_seconds < first_parts.end_game_seconds
+    where first_parts.can_end_early
+    qualify row_number() over (
+        partition by goals.game_id, goals.event_index
+        order by first_parts.start_event_index
+    ) = 1
+),
+
+first_pass_ends as (
+    select
+        penalty_id,
+        min(goal_event_index) as ended_by_goal_event_index
+    from first_pass_picks
+    group by penalty_id
+),
+
+second_pass_picks as (
+    -- The same pick again, now skipping minors an earlier goal already ended. Without this,
+    -- two goals on a 5-on-3 would both pick the first minor and the second would never end.
+    select
+        first_parts.penalty_id,
+        goals.event_index as goal_event_index
+    from goals
+    inner join first_parts
+        on goals.game_id = first_parts.game_id
+        and goals.scoring_team_id != first_parts.penalized_team_id
+        and goals.event_index > first_parts.start_event_index
+        and goals.game_seconds < first_parts.end_game_seconds
+    left join first_pass_ends on first_parts.penalty_id = first_pass_ends.penalty_id
+    where
+        first_parts.can_end_early
+        and (
+            first_pass_ends.ended_by_goal_event_index is null
+            or goals.event_index <= first_pass_ends.ended_by_goal_event_index
+        )
+    qualify row_number() over (
+        partition by goals.game_id, goals.event_index
+        order by first_parts.start_event_index
+    ) = 1
+),
+
+second_pass_ends as (
+    select
+        penalty_id,
+        min(goal_event_index) as ended_by_goal_event_index
+    from second_pass_picks
+    group by penalty_id
+),
+
+first_parts_ended as (
+    select
+        first_parts.*,
+        second_pass_ends.ended_by_goal_event_index,
+        ending_goals.game_seconds as ended_at_game_seconds
+    from first_parts
+    left join second_pass_ends on first_parts.penalty_id = second_pass_ends.penalty_id
+    left join goals as ending_goals
+        on first_parts.game_id = ending_goals.game_id
+        and second_pass_ends.ended_by_goal_event_index = ending_goals.event_index
+),
+
+later_parts as (
+    -- Starts when the first part ends: its time running out, or the goal that ended it.
+    select
+        numbered.league_id,
+        numbered.game_id,
+        numbered.season_id,
+        numbered.penalty_id,
+        numbered.penalized_team_id,
+        numbered.is_power_play_penalty,
+        numbered.duration_seconds,
+        numbered.is_power_play_penalty as can_end_early,
+        coalesce(
+            first_parts_ended.ended_by_goal_event_index, first_parts_ended.start_event_index
+        ) as start_event_index,
+        coalesce(
+            first_parts_ended.ended_at_game_seconds, first_parts_ended.end_game_seconds
+        ) as start_game_seconds
+    from numbered
+    inner join first_parts_ended
+        on numbered.first_part_penalty_id = first_parts_ended.penalty_id
+    where numbered.is_minor and numbered.part_number > 1
+),
+
+later_part_ends as (
+    select
+        later_parts.penalty_id,
+        min(goals.event_index) as ended_by_goal_event_index
+    from later_parts
+    inner join goals
+        on later_parts.game_id = goals.game_id
+        and later_parts.penalized_team_id != goals.scoring_team_id
+        and later_parts.start_event_index < goals.event_index
+        and later_parts.start_game_seconds <= goals.game_seconds
+        and later_parts.start_game_seconds + later_parts.duration_seconds > goals.game_seconds
+    where later_parts.can_end_early
+    group by later_parts.penalty_id
+)
+
+select
+    league_id,
+    game_id,
+    season_id,
+    penalty_id,
+    penalized_team_id,
+    is_power_play_penalty,
+    start_event_index,
+    start_game_seconds,
+    end_game_seconds,
+    ended_by_goal_event_index
+from first_parts_ended
+
+union all
+
+select
+    later_parts.league_id,
+    later_parts.game_id,
+    later_parts.season_id,
+    later_parts.penalty_id,
+    later_parts.penalized_team_id,
+    later_parts.is_power_play_penalty,
+    later_parts.start_event_index,
+    later_parts.start_game_seconds,
+    later_parts.start_game_seconds + later_parts.duration_seconds as end_game_seconds,
+    later_part_ends.ended_by_goal_event_index
+from later_parts
+left join later_part_ends on later_parts.penalty_id = later_part_ends.penalty_id

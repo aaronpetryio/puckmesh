@@ -1,6 +1,33 @@
 version: 2
 
 models:
+  - name: int_penalties_timed
+    description: >
+      One row per penalty that takes a skater off the ice, with when it starts and ends.
+      Rules (docs/plans/xg-model.md, step 2): minors always count, so coincidental minors
+      give 4-on-4; majors and match penalties count only when they create a power play;
+      misconducts and penalty-shot penalties never count. A goal the league marks as a
+      power-play goal ends the minor that started first among those the other team is
+      serving; majors and coincidental minors run their full time. A double minor (two
+      2-minute minors on one player at once) is served back to back. Approximations: a
+      third penalty while two are in the box doesn't wait its turn, and a third part of a
+      stacked minor starts with the second.
+    columns:
+      - name: penalty_id
+        data_tests: [unique, not_null]
+      - name: start_event_index
+        description: The penalty covers events after this one.
+        data_tests: [not_null]
+      - name: start_game_seconds
+        description: >
+          And at or after this time: later than the call for a double minor's second part.
+        data_tests: [not_null]
+      - name: end_game_seconds
+        description: When the penalty's time runs out, if no goal ends it first.
+        data_tests: [not_null]
+      - name: ended_by_goal_event_index
+        description: The power-play goal that ended the penalty early. Null if none did.
+
   - name: int_shots_enriched
     description: >
       Shot attempts with xG context: position in feet from center ice, turned so every shot
@@ -100,6 +127,12 @@ unit_tests:
         rows:
           - {game_id: 1, home_team_id: 10, away_team_id: 20}
           - {game_id: 2, home_team_id: 10, away_team_id: 20}
+      - input: ref('stg_pwhl__seasons')
+        rows: []
+      - input: ref('int_penalties_timed')
+        rows: []
+      - input: ref('stg_pwhl__goalie_changes')
+        rows: []
     expect:
       rows:
         - {game_id: 1, event_index: 1, is_empty_net: false,
@@ -118,3 +151,153 @@ unit_tests:
            x_ft: 73.3, y_ft: 2.8, distance_ft: 15.9, angle_deg: 10.3}
         - {game_id: 2, event_index: 3, is_empty_net: true,
            x_ft: -50.0, y_ft: 0.0, distance_ft: 139.0, angle_deg: 0.0}
+
+  - name: int_shots_enriched_counts_skaters
+    description: >
+      Skaters per side at each shot, from penalties and goalie pulls. Game 1 is a regular
+      season game: a power play, then the goal that ends it; three penalties at once still
+      leave 3 skaters; coincidental minors give 4-on-4; a pulled goalie gives 6v5; an
+      overtime penalty turns 3-on-3 into 4v3.
+    model: int_shots_enriched
+    given:
+      - input: ref('stg_pwhl__shots')
+        rows:
+          # Home power play.
+          - {game_id: 1, season_id: 1, event_index: 10, period: 1, game_seconds: 100,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+          # After the power-play goal at event 11 ended the penalty.
+          - {game_id: 1, season_id: 1, event_index: 12, period: 1, game_seconds: 140,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+          # Away team with three players in the box.
+          - {game_id: 1, season_id: 1, event_index: 20, period: 1, game_seconds: 200,
+             shooting_team_id: 20, is_home_team: false, goalie_player_id: 6,
+             shot_result: on_net, x_location: 100, y_location: 150}
+          # Coincidental minors.
+          - {game_id: 1, season_id: 1, event_index: 30, period: 1, game_seconds: 400,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+          # Home goalie pulled late in the third.
+          - {game_id: 1, season_id: 1, event_index: 50, period: 3, game_seconds: 3500,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+          # Overtime penalty to the away team.
+          - {game_id: 1, season_id: 1, event_index: 60, period: 4, game_seconds: 3700,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+      - input: ref('stg_pwhl__goals')
+        rows:
+          - {game_id: 1, event_index: 11, goal_id: 1, scoring_team_id: 10, is_empty_net: false}
+      - input: ref('stg_pwhl__games')
+        rows:
+          - {game_id: 1, home_team_id: 10, away_team_id: 20}
+      - input: ref('stg_pwhl__seasons')
+        rows:
+          - {season_id: 1, season_type: regular}
+      - input: ref('int_penalties_timed')
+        rows:
+          - {game_id: 1, penalty_id: 1, penalized_team_id: 20, start_event_index: 5,
+             start_game_seconds: 50, end_game_seconds: 170, ended_by_goal_event_index: 11}
+          - {game_id: 1, penalty_id: 2, penalized_team_id: 20, start_event_index: 15,
+             start_game_seconds: 150, end_game_seconds: 270}
+          - {game_id: 1, penalty_id: 3, penalized_team_id: 20, start_event_index: 16,
+             start_game_seconds: 160, end_game_seconds: 280}
+          - {game_id: 1, penalty_id: 4, penalized_team_id: 20, start_event_index: 17,
+             start_game_seconds: 165, end_game_seconds: 285}
+          - {game_id: 1, penalty_id: 5, penalized_team_id: 10, start_event_index: 25,
+             start_game_seconds: 380, end_game_seconds: 500}
+          - {game_id: 1, penalty_id: 6, penalized_team_id: 20, start_event_index: 26,
+             start_game_seconds: 380, end_game_seconds: 500}
+          - {game_id: 1, penalty_id: 7, penalized_team_id: 20, start_event_index: 55,
+             start_game_seconds: 3650, end_game_seconds: 3770}
+      - input: ref('stg_pwhl__goalie_changes')
+        rows:
+          - {game_id: 1, event_index: 45, period: 3, team_id: 10, goalie_in_player_id: null}
+    expect:
+      rows:
+        - {game_id: 1, event_index: 10, skaters_for: 5, skaters_against: 4, strength_state: 5v4}
+        - {game_id: 1, event_index: 12, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
+        - {game_id: 1, event_index: 20, skaters_for: 3, skaters_against: 5, strength_state: 3v5}
+        - {game_id: 1, event_index: 30, skaters_for: 4, skaters_against: 4, strength_state: 4v4}
+        - {game_id: 1, event_index: 50, skaters_for: 6, skaters_against: 5, strength_state: 6v5}
+        - {game_id: 1, event_index: 60, skaters_for: 4, skaters_against: 3, strength_state: 4v3}
+
+  - name: int_penalties_timed_ends_and_stacks_penalties
+    description: >
+      A power-play goal ends a minor; a major and coincidental minors run their full time;
+      a double minor runs back to back, the goal in its first half starting the second;
+      two goals on a 5-on-3 end both minors; misconducts, penalty-shot penalties and
+      fighting majors are dropped.
+    model: int_penalties_timed
+    given:
+      - input: ref('stg_pwhl__penalties')
+        rows:
+          - {game_id: 1, event_index: 10, game_seconds: 100, penalty_id: 1,
+             penalized_team_id: 20, penalized_player_id: 1, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 20, game_seconds: 300, penalty_id: 2,
+             penalized_team_id: 20, penalized_player_id: 2, penalty_class: Major,
+             penalty_minutes: 5.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 30, game_seconds: 700, penalty_id: 3,
+             penalized_team_id: 10, penalized_player_id: 3, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: false, is_penalty_shot: false}
+          - {game_id: 1, event_index: 31, game_seconds: 700, penalty_id: 4,
+             penalized_team_id: 20, penalized_player_id: 4, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: false, is_penalty_shot: false}
+          # Double minor: two 2-minute minors on player 7 at once.
+          - {game_id: 1, event_index: 40, game_seconds: 1000, penalty_id: 5,
+             penalized_team_id: 20, penalized_player_id: 7, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 41, game_seconds: 1000, penalty_id: 6,
+             penalized_team_id: 20, penalized_player_id: 7, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          # 5-on-3.
+          - {game_id: 1, event_index: 50, game_seconds: 1500, penalty_id: 7,
+             penalized_team_id: 20, penalized_player_id: 8, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 51, game_seconds: 1510, penalty_id: 8,
+             penalized_team_id: 20, penalized_player_id: 9, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          # Dropped.
+          - {game_id: 1, event_index: 60, game_seconds: 2000, penalty_id: 9,
+             penalized_team_id: 20, penalized_player_id: 1, penalty_class: Misconduct,
+             penalty_minutes: 10.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 1, event_index: 61, game_seconds: 2100, penalty_id: 10,
+             penalized_team_id: 20, penalized_player_id: 1, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: true}
+          - {game_id: 1, event_index: 62, game_seconds: 2200, penalty_id: 11,
+             penalized_team_id: 20, penalized_player_id: 1, penalty_class: Major,
+             penalty_minutes: 5.00, is_power_play_penalty: false, is_penalty_shot: false}
+      - input: ref('stg_pwhl__goals')
+        rows:
+          - {game_id: 1, event_index: 12, game_seconds: 130, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 1, event_index: 22, game_seconds: 320, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 1, event_index: 33, game_seconds: 730, scoring_team_id: 10,
+             is_power_play: false}
+          - {game_id: 1, event_index: 43, game_seconds: 1030, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 1, event_index: 53, game_seconds: 1530, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 1, event_index: 55, game_seconds: 1560, scoring_team_id: 10,
+             is_power_play: true}
+    expect:
+      rows:
+        - {penalty_id: 1, start_event_index: 10, start_game_seconds: 100,
+           end_game_seconds: 220, ended_by_goal_event_index: 12}
+        - {penalty_id: 2, start_event_index: 20, start_game_seconds: 300,
+           end_game_seconds: 600, ended_by_goal_event_index: null}
+        - {penalty_id: 3, start_event_index: 30, start_game_seconds: 700,
+           end_game_seconds: 820, ended_by_goal_event_index: null}
+        - {penalty_id: 4, start_event_index: 31, start_game_seconds: 700,
+           end_game_seconds: 820, ended_by_goal_event_index: null}
+        - {penalty_id: 5, start_event_index: 40, start_game_seconds: 1000,
+           end_game_seconds: 1120, ended_by_goal_event_index: 43}
+        - {penalty_id: 6, start_event_index: 43, start_game_seconds: 1030,
+           end_game_seconds: 1150, ended_by_goal_event_index: null}
+        - {penalty_id: 7, start_event_index: 50, start_game_seconds: 1500,
+           end_game_seconds: 1620, ended_by_goal_event_index: 53}
+        - {penalty_id: 8, start_event_index: 51, start_game_seconds: 1510,
+           end_game_seconds: 1630, ended_by_goal_event_index: 55}
