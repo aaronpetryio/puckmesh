@@ -29,7 +29,7 @@ counted as (
         coalesce(served_by_player_id, penalized_player_id) as serving_player_id,
         penalty_class = 'Minor' as is_minor,
         is_power_play_penalty,
-        cast(penalty_minutes * 60 as int) as duration_seconds
+        (penalty_minutes * 60)::int as duration_seconds
     from penalties
     where
         not coalesce(is_penalty_shot, false)
@@ -41,15 +41,26 @@ counted as (
 
 numbered as (
     -- A double minor is recorded as two 2-minute minors on one player at the same moment,
-    -- served back to back. Parts after the first start when the first one ends.
+    -- served back to back. Parts after the first start when the first one ends. A bench
+    -- minor with no player named stands alone.
     select
         *,
         row_number() over (
-            partition by game_id, penalized_team_id, serving_player_id, game_seconds, is_minor
+            partition by
+                game_id,
+                penalized_team_id,
+                coalesce(serving_player_id, -penalty_id),
+                game_seconds,
+                is_minor
             order by event_index
         ) as part_number,
         first_value(penalty_id) over (
-            partition by game_id, penalized_team_id, serving_player_id, game_seconds, is_minor
+            partition by
+                game_id,
+                penalized_team_id,
+                coalesce(serving_player_id, -penalty_id),
+                game_seconds,
+                is_minor
             order by event_index
         ) as first_part_penalty_id
     from counted
@@ -77,6 +88,7 @@ first_pass_picks as (
     -- started first.
     select
         first_parts.penalty_id,
+        goals.game_id,
         goals.event_index as goal_event_index
     from goals
     inner join first_parts
@@ -104,6 +116,7 @@ second_pass_picks as (
     -- two goals on a 5-on-3 would both pick the first minor and the second would never end.
     select
         first_parts.penalty_id,
+        goals.game_id,
         goals.event_index as goal_event_index
     from goals
     inner join first_parts
@@ -168,6 +181,7 @@ later_parts as (
 ),
 
 later_part_ends as (
+    -- A goal ends one penalty, so goals that already ended a first part are skipped.
     select
         later_parts.penalty_id,
         min(goals.event_index) as ended_by_goal_event_index
@@ -178,7 +192,12 @@ later_part_ends as (
         and later_parts.start_event_index < goals.event_index
         and later_parts.start_game_seconds <= goals.game_seconds
         and later_parts.start_game_seconds + later_parts.duration_seconds > goals.game_seconds
-    where later_parts.can_end_early
+    left join second_pass_picks
+        on goals.game_id = second_pass_picks.game_id
+        and goals.event_index = second_pass_picks.goal_event_index
+    where
+        later_parts.can_end_early
+        and second_pass_picks.penalty_id is null
     group by later_parts.penalty_id
 )
 

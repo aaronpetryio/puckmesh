@@ -10,8 +10,10 @@ models:
       power-play goal ends the minor that started first among those the other team is
       serving; majors and coincidental minors run their full time. A double minor (two
       2-minute minors on one player at once) is served back to back. Approximations: a
-      third penalty while two are in the box doesn't wait its turn, and a third part of a
-      stacked minor starts with the second.
+      third penalty while two are in the box doesn't wait its turn; a third stacked minor
+      starts with the second; a third power-play goal against three minors at once may
+      leave one running; and when a double minor's second part and another minor are both
+      running, a goal may end the other one first.
     columns:
       - name: penalty_id
         data_tests: [unique, not_null]
@@ -269,6 +271,17 @@ unit_tests:
           - {game_id: 1, event_index: 62, game_seconds: 2200, penalty_id: 11,
              penalized_team_id: 20, penalized_player_id: 1, penalty_class: Major,
              penalty_minutes: 5.00, is_power_play_penalty: false, is_penalty_shot: false}
+          # Game 2: a double minor's second part and another minor both running when a
+          # goal comes. The goal ends one penalty, not both.
+          - {game_id: 2, event_index: 15, game_seconds: 140, penalty_id: 12,
+             penalized_team_id: 20, penalized_player_id: 3, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 2, event_index: 16, game_seconds: 140, penalty_id: 13,
+             penalized_team_id: 20, penalized_player_id: 3, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
+          - {game_id: 2, event_index: 20, game_seconds: 160, penalty_id: 14,
+             penalized_team_id: 20, penalized_player_id: 4, penalty_class: Minor,
+             penalty_minutes: 2.00, is_power_play_penalty: true, is_penalty_shot: false}
       - input: ref('stg_pwhl__goals')
         rows:
           - {game_id: 1, event_index: 12, game_seconds: 130, scoring_team_id: 10,
@@ -282,6 +295,10 @@ unit_tests:
           - {game_id: 1, event_index: 53, game_seconds: 1530, scoring_team_id: 10,
              is_power_play: true}
           - {game_id: 1, event_index: 55, game_seconds: 1560, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 2, event_index: 18, game_seconds: 150, scoring_team_id: 10,
+             is_power_play: true}
+          - {game_id: 2, event_index: 22, game_seconds: 200, scoring_team_id: 10,
              is_power_play: true}
     expect:
       rows:
@@ -301,3 +318,9 @@ unit_tests:
            end_game_seconds: 1620, ended_by_goal_event_index: 53}
         - {penalty_id: 8, start_event_index: 51, start_game_seconds: 1510,
            end_game_seconds: 1630, ended_by_goal_event_index: 55}
+        - {penalty_id: 12, start_event_index: 15, start_game_seconds: 140,
+           end_game_seconds: 260, ended_by_goal_event_index: 18}
+        - {penalty_id: 13, start_event_index: 18, start_game_seconds: 150,
+           end_game_seconds: 270, ended_by_goal_event_index: null}
+        - {penalty_id: 14, start_event_index: 20, start_game_seconds: 160,
+           end_game_seconds: 280, ended_by_goal_event_index: 22}
