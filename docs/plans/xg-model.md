@@ -38,7 +38,8 @@ Queries, results, and findings: [xg-audit.md](xg-audit.md).
   - Goals reconcile exactly, and no shot is missing coordinates.
   - Tips are recorded. "Default" (unknown) is a third of shot types.
   - `is_quality_chance` is a location zone, not leakage: a benchmark, not a feature.
-  - Empty nets look undercounted (9 shots in three seasons), which follow-up 5a checks.
+  - Empty nets were undercounted: 9 found vs 94 flagged by the league. Fixed by taking the flag from the goal event (5a).
+  - Shot type is recorded more often in later seasons (5b), so keep it only if it helps on held-out data.
 
 What the audit looked at:
 
@@ -68,21 +69,21 @@ Already known:
     - sportsdataverse's newer path counts skaters from HockeyTech's shift feed (`modulekit` / `gameshifts`), which we don't fetch. In 2025, 5–8% of its events had implausible counts, and it has no counts for 2024 or 2025 shots.
     - We take the penalty rebuild, which is more careful than the windows. Shifts stay a fallback if the reconciliation fails.
   - **Edge cases to handle:**
-    - Which penalties change strength: use the league's `pp` flag on the penalty, which should already exclude coincidental penalties.
-    - Misconducts (10 min) and game misconducts take no one off the ice.
-    - A penalty shot replaces the power play.
-    - Double minors (4 min): a power-play goal ends only the current 2 minutes.
+    - Which penalties change strength: the league's `pp` flag on the penalty, which excludes coincidental penalties (5d). Two exceptions override it:
+      - misconducts (10 and 20 min) never change strength;
+      - penalty-shot penalties never change strength, since the shot replaces the power play.
+    - Double minors are recorded as two 2-minute minors (5d). Two minors on one player at the same moment run back to back (5v4 for 4 minutes), not at once. A power-play goal ends only the one running.
     - Majors and match penalties: run the full 5 minutes whatever happens.
     - Two in the box at most: a third penalty waits until the first one ends, so a team never drops below 3 skaters.
     - On a 5v3 goal, only the penalty that started first ends.
     - Short-handed goals end nothing.
     - Penalties carry across period breaks; `game_seconds` already runs on through the game.
-    - Regular-season overtime is 3-on-3, so a penalty adds a skater for the other team (4v3) instead of removing one. Playoff overtime is 5-on-5. Query 5c checks this.
+    - Regular-season overtime is 3-on-3, so a penalty adds a skater for the other team (4v3) instead of removing one. Playoff overtime is 5-on-5. Confirmed by 5c.
     - Same-second order: a shot and a penalty in the same second follow `event_index`, not the clock.
-    - Pulled goalies: from `stg_pwhl__goalie_changes`, the team with an empty net counts as 6 skaters. Delayed-penalty pulls probably aren't recorded; that's a known gap.
+    - Pulled goalies: from `stg_pwhl__goalie_changes`, the team with an empty net counts as 6 skaters (38 goals scored 6v5 in 5c). Delayed-penalty pulls may not be recorded; that's a known gap.
   - **Tests:**
     - Goals' `is_power_play` / `is_short_handed` flags.
-    - The on-ice player lists on each goal, if query 5c shows they're complete. They give real skater counts at every goal.
+    - The on-ice player lists on each goal, which count skaters only (5c). Skip goals whose `against` list is empty (~2.5%), and allow a small mismatch rate: a few lists disagree with the league's own flags.
 - Maybe a rough rush flag (a shot within a few seconds of an event in another zone), if step 1 shows the event timing supports it.
 - Why the features go in dbt: they get tested and documented there, and the ratings and predictions models can reuse them. The Python side reads one table.
 

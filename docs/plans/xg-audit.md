@@ -370,6 +370,32 @@ order by band_order
   - Within a distance band, flagged shots score more because the unflagged ones are the wide-angle shots at the same distance.
   - **Verdict:** not leakage, but redundant with distance and angle. Not a feature; a benchmark: "how much better than the league's own zone is the model?"
 
+### Follow-ups (5a–5d)
+
+- **5a: empty nets were undercounted, as suspected.**
+  - The league flags 94 empty-net goals; `fct_shots` found 9.
+  - The shot event usually still names the pulled goalie. So ~85 empty-net goals sat in the shots-at-goalie set, many from long range, which inflated far-out goal rates.
+  - **Fixed:** `is_empty_net` now comes from the goal event.
+  - Goalie pulls are recorded: 456 goalie changes with nobody coming in. That gives strength state its empty-net input.
+- **5b: shot type recording improved over time.**
+  - "Default" (no type recorded) is 98% of the 2024 preseason and 46% of the 2024 regular season, falling to 21% in 2025-26.
+  - Shot type is usable but uneven across seasons. A model trained on early seasons and tested on later ones will see the mix shift.
+  - Keep it only if it improves held-out log loss.
+- **5c: the on-ice lists on goals are good, and they count skaters only.**
+  - Even strength reads 5v5, and empty-net goals read 5v6 (the defending team's sixth skater).
+  - Power-play goals read 5v4 or 5v3. Short-handed goals read 4v5.
+  - Regular-season overtime is 3-on-3 (46 goals). A penalty there makes it 4v3 (6 goals). Playoff overtime is 5-on-5.
+  - 38 goals came 6v5 with no power-play flag: a team scoring with its goalie pulled.
+  - About 40 goals (~2.5%) have an empty `against` list (e.g. 3v0). Treat those as missing.
+  - A handful disagree with the flags, e.g. 5v5 marked as a power play.
+  - **Verdict:** the lists make a strong test for strength state, but it needs a small tolerance rather than exact agreement.
+- **5d: the penalty `pp` flag behaves as expected, with three exceptions.**
+  - 1,876 minors create a power play, and 189 (coincidental) don't.
+  - Majors split the same way: 21 create one, 6 don't (fights).
+  - **No 4-minute penalties exist,** so a double minor must be recorded as two 2-minute minors. Two minors on one player at the same moment have to run back to back (4 minutes at 5v4), not together (5v3).
+  - **Penalty-shot penalties:** 11 carry `pp` = true, but a penalty shot replaces the power play, so they never change strength.
+  - **Misconducts:** 2 carry `pp` = true. They never change strength (10 and 20 min).
+
 ## 5. Follow-ups
 
 Prompted by the results above, and input to the strength-state model. Same routine: paste the results back.
