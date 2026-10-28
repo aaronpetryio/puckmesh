@@ -950,4 +950,58 @@ query	strength_state	shots_at_goalie	goals	goal_rate
 ### 6c
 
 ```text
+query	game_id	period	goal_seconds	our_state	listed_state	is_power_play	called_seconds	side	penalty_class	penalty_minutes	is_power_play_penalty	timed_start	timed_end	timed_ended_by
+6c	4	3	3440	5v4	5v5	true	3421	other team	Minor	2.00	true	3421	3541	109
+6c	5	3	2794	3v4	4v5	false	2745	scoring team	Minor	2.00	false	2745	2865	null
+6c	5	3	2794	3v4	4v5	false	2745	scoring team	Minor	2.00	true	2745	2865	null
+6c	5	3	2794	3v4	4v5	false	2745	other team	Minor	2.00	false	2745	2865	null
+6c	16	2	1226	5v5	5v4	false	null	other team	null	null	null	null	null	null
+6c	29	2	1909	5v4	5v5	true	1817	other team	Minor	2.00	true	1817	1937	94
+6c	39	2	1850	5v4	5v5	false	1748	other team	Minor	2.00	true	1748	1868	null
+6c	61	1	746	5v4	5v5	true	693	other team	Minor	2.00	true	693	813	31
+6c	78	3	2426	5v4	3v5	true	2385	other team	Minor	2.00	true	2385	2505	49
+6c	81	1	283	5v5	5v4	false	103	other team	Minor	2.00	true	103	223	null
+6c	81	3	3594	5v5	4v4	false	null	other team	null	null	null	null	null	null
+6c	82	1	214	5v5	3v5	false	null	other team	null	null	null	null	null	null
+6c	89	2	2015	5v5	5v4	true	1939	other team	Minor	2.00	true	null	null	null
+6c	89	3	3377	5v5	4v5	false	3338	scoring team	Minor	2.00	true	null	null	null
+6c	121	2	2307	4v5	5v5	false	2202	scoring team	Minor	2.00	true	2202	2322	null
+6c	122	3	3241	5v5	5v4	true	3111	other team	Misconduct	10.00	false	null	null	null
+6c	122	3	3241	5v5	5v4	true	3111	other team	Major	5.00	false	null	null	null
+6c	135	3	3068	5v4	5v3	true	3021	other team	Minor	2.00	false	3021	3141	null
+6c	148	2	1414	5v5	5v4	true	1250	other team	Major	5.00	false	null	null	null
+6c	148	2	1414	5v5	5v4	true	1250	other team	Misconduct	10.00	false	null	null	null
+6c	151	3	3387	5v5	5v4	true	3198	scoring team	Minor	2.00	false	3198	3318	null
+6c	151	3	3387	5v5	5v4	true	3267	other team	Minor	2.00	true	3267	3387	null
+6c	161	3	2858	5v5	5v4	true	2710	other team	Major	5.00	false	null	null	null
+6c	161	3	2858	5v5	5v4	true	2710	other team	Misconduct	10.00	false	null	null	null
+6c	164	2	1280	5v4	5v5	false	1005	scoring team	Minor	2.00	true	1005	1125	null
+6c	164	2	1280	5v4	5v5	false	1280	other team	Minor	2.00	true	1280	1400	null
+6c	185	3	3386	5v4	5v5	false	3177	scoring team	Minor	2.00	true	3177	3297	null
+6c	185	3	3386	5v4	5v5	false	3386	other team	Minor	2.00	true	3386	3506	192
+6c	193	3	3333	5v4	5v5	false	3061	scoring team	Minor	2.00	true	3061	3181	null
+6c	193	3	3333	5v4	5v5	false	3300	other team	Minor	2.00	true	3300	3420	null
+6c	201	3	2431	5v4	5v5	false	2431	other team	Minor	2.00	true	2431	2551	null
+6c	213	3	2502	4v3	5v4	true	2210	other team	Minor	2.00	true	2330	2450	null
+6c	213	3	2502	4v3	5v4	true	2210	other team	Minor	2.00	true	2210	2330	null
+6c	213	3	2502	4v3	5v4	true	2484	scoring team	Minor	2.00	false	2484	2604	null
+6c	213	3	2502	4v3	5v4	true	2484	other team	Minor	2.00	false	2484	2604	null
+6c	213	3	2502	4v3	5v4	true	2484	other team	Minor	2.00	true	2484	2604	128
+6c	221	3	3516	5v5	5v4	true	3361	other team	Major	5.00	false	null	null	null
+6c	221	3	3516	5v5	5v4	true	3361	other team	Misconduct	10.00	false	null	null	null
+6c	221	3	3538	5v5	5v4	true	3361	other team	Major	5.00	false	null	null	null
+6c	221	3	3538	5v5	5v4	true	3361	other team	Misconduct	10.00	false	null	null	null
+6c	260	4	3689	3v3	4v4	false	3504	scoring team	Minor	2.00	true	3504	3624	null
+6c	271	2	1557	5v4	5v5	true	1537	other team	Minor	2.00	true	1537	1657	66
+6c	288	3	3154	4v3	5v4	true	3066	other team	Minor	2.00	false	3066	3186	null
+6c	288	3	3154	4v3	5v4	true	3066	other team	Minor	2.00	true	3066	3186	143
+6c	288	3	3154	4v3	5v4	true	3066	scoring team	Minor	2.00	false	3066	3186	null
+6c	338	1	1086	5v5	5v4	true	932	other team	Misconduct	10.00	false	null	null	null
+6c	338	1	1086	5v5	5v4	true	932	other team	Major	5.00	false	null	null	null
+6c	340	3	2578	5v5	5v4	true	2352	other team	Misconduct	10.00	false	null	null	null
+6c	340	3	2578	5v5	5v4	true	2352	scoring team	Minor	2.00	false	2352	2472	null
+6c	340	3	2578	5v5	5v4	true	2352	other team	Major	5.00	false	null	null	null
+6c	340	3	2626	5v5	4v5	false	2352	other team	Minor	2.00	false	2352	2472	null
+6c	340	3	2626	5v5	4v5	false	2352	scoring team	Major	5.00	false	null	null	null
+6c	340	3	2626	5v5	4v5	false	2352	scoring team	Misconduct	10.00	false	null	null	null
 ```
