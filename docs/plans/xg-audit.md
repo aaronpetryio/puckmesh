@@ -608,19 +608,92 @@ query	distance_band	shots_at_goalie	goals	goal_rate	flagged_share	flagged_share_
 ### 5a
 
 ```text
+query	season_id	goal_events	goal_events_empty_net	shots_empty_net	goalie_pulls	goalie_changes
+5a	1	341	20	1	90	300
+5a	2	59	1	0	2	22
+5a	3	44	6	2	15	54
+5a	4	38	2	0	16	43
+5a	5	441	25	2	121	391
+5a	6	58	0	0	16	50
+5a	7	41	0	0	18	48
+5a	8	549	38	3	160	506
+5a	9	52	2	1	18	55
 ```
 
 ### 5b
 
 ```text
+query	season_id	shots_at_goalie	default_type_shots	default_share
+5b	1	4157	1913	0.46
+5b	2	594	582	0.98
+5b	3	762	420	0.551
+5b	4	338	90	0.266
+5b	5	4912	1373	0.28
+5b	6	757	251	0.332
+5b	7	422	135	0.32
+5b	8	6708	1397	0.208
+5b	9	726	239	0.329
 ```
 
 ### 5c
 
 ```text
+query	is_overtime	is_power_play	is_short_handed	is_empty_net	players_for	players_against	goals
+5c	false	false	false	false	5	5	1022
+5c	false	true	false	false	5	4	280
+5c	false	false	false	true	5	6	82
+5c	true	false	false	false	3	3	46
+5c	false	false	false	false	6	5	38
+5c	false	false	true	false	4	5	38
+5c	false	true	false	false	5	3	16
+5c	true	false	false	false	5	5	16
+5c	false	false	false	false	4	4	12
+5c	false	false	false	false	3	0	12
+5c	false	false	false	false	2	0	11
+5c	true	true	false	false	4	3	6
+5c	false	false	true	true	4	6	6
+5c	false	true	false	false	5	5	4
+5c	false	false	false	false	5	4	3
+5c	false	false	false	false	5	0	3
+5c	false	true	false	false	3	0	3
+5c	false	true	false	false	6	4	3
+5c	false	false	false	false	1	0	2
+5c	true	false	false	false	2	0	2
+5c	false	true	false	false	1	0	1
+5c	false	true	false	true	5	5	1
+5c	false	true	false	false	2	0	1
+5c	false	false	true	true	5	6	1
+5c	false	false	false	false	6	6	1
+5c	false	true	false	false	6	5	1
+5c	false	false	false	true	5	5	1
+5c	false	true	false	false	3	5	1
+5c	false	false	false	false	3	5	1
+5c	true	false	false	false	4	3	1
+5c	false	false	false	true	6	4	1
+5c	false	false	false	true	1	0	1
+5c	true	false	false	false	4	4	1
+5c	false	false	false	false	4	0	1
+5c	false	false	true	true	4	5	1
+5c	false	false	true	false	3	4	1
+5c	false	true	false	false	4	3	1
+5c	false	false	false	false	5	6	1
 ```
 
 ### 5d
 
 ```text
+query	penalty_class	penalty_minutes	is_power_play_penalty	is_penalty_shot	is_bench_penalty	penalties
+5d	Minor	2.00	true	false	false	1876
+5d	Minor	2.00	false	false	false	189
+5d	Minor	2.00	true	false	true	40
+5d	Misconduct	10.00	false	false	false	31
+5d	Major	5.00	true	false	false	21
+5d	Minor	2.00	true	true	false	11
+5d	Major	5.00	false	false	false	6
+5d	Minor	2.00	false	true	false	5
+5d	Misconduct	10.00	true	false	false	2
+5d	Match	5.00	true	false	false	2
+5d	Minor	2.00	false	false	true	1
+5d	Misconduct	20.00	false	false	false	1
+5d	Match	5.00	false	false	false	1
 ```
