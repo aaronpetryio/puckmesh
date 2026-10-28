@@ -588,6 +588,98 @@ group by strength_state
 order by shots_at_goalie desc
 ```
 
+### 6c. Penalty mismatches in detail
+
+The 6a mismatches that aren't about pulled goalies (no 6 on either side), each with every penalty called in that game in the 5 minutes before the goal. `side` says whether the penalized team is the scoring team or the other one. `timed_*` is what `int_penalties_timed` made of it; nulls there mean we dropped the penalty.
+
+```sql
+with shots as (
+    select
+        game_id,
+        goal_id,
+        period,
+        game_seconds,
+        shooting_team_id,
+        strength_state
+    from dev.ci_gold.fct_shots
+    where is_goal
+),
+
+goals as (
+    select
+        game_id,
+        goal_id,
+        is_power_play,
+        concat(size(on_ice_for_player_ids), 'v', size(on_ice_against_player_ids)) as listed_state
+    from dev.ci_silver.stg_pwhl__goals
+    where
+        size(on_ice_for_player_ids) between 3 and 5
+        and size(on_ice_against_player_ids) between 3 and 5
+),
+
+penalties as (
+    select
+        game_id,
+        penalty_id,
+        event_index,
+        game_seconds,
+        penalized_team_id,
+        penalty_class,
+        penalty_minutes,
+        is_power_play_penalty
+    from dev.ci_silver.stg_pwhl__penalties
+),
+
+timed as (
+    select
+        penalty_id,
+        start_game_seconds,
+        end_game_seconds,
+        ended_by_goal_event_index
+    from dev.ci_silver.int_penalties_timed
+),
+
+mismatches as (
+    select
+        shots.*,
+        goals.listed_state,
+        goals.is_power_play
+    from shots
+    inner join goals
+        on shots.game_id = goals.game_id
+        and shots.goal_id = goals.goal_id
+    where
+        shots.strength_state != goals.listed_state
+        and shots.strength_state not like '%6%'
+)
+
+select
+    '6c' as query,
+    mismatches.game_id,
+    mismatches.period,
+    mismatches.game_seconds as goal_seconds,
+    mismatches.strength_state as our_state,
+    mismatches.listed_state,
+    mismatches.is_power_play,
+    penalties.game_seconds as called_seconds,
+    case
+        when penalties.penalized_team_id = mismatches.shooting_team_id then 'scoring team'
+        else 'other team'
+    end as side,
+    penalties.penalty_class,
+    penalties.penalty_minutes,
+    penalties.is_power_play_penalty,
+    timed.start_game_seconds as timed_start,
+    timed.end_game_seconds as timed_end,
+    timed.ended_by_goal_event_index as timed_ended_by
+from mismatches
+left join penalties
+    on mismatches.game_id = penalties.game_id
+    and penalties.game_seconds between mismatches.game_seconds - 300 and mismatches.game_seconds
+left join timed on penalties.penalty_id = timed.penalty_id
+order by mismatches.game_id, mismatches.game_seconds, penalties.game_seconds
+```
+
 ## Results
 
 Paste each query's output below, as copied from the results grid.
@@ -853,4 +945,9 @@ query	strength_state	shots_at_goalie	goals	goal_rate
 6b	6v3	3	1	0.333
 6b	3v5	1	0	0
 6b	4v6	1	0	0
+```
+
+### 6c
+
+```text
 ```

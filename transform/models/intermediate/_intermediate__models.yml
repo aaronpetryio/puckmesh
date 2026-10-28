@@ -158,8 +158,9 @@ unit_tests:
     description: >
       Skaters per side at each shot, from penalties and goalie pulls. Game 1 is a regular
       season game: a power play, then the goal that ends it; three penalties at once still
-      leave 3 skaters; coincidental minors give 4-on-4; a pulled goalie gives 6v5; an
-      overtime penalty turns 3-on-3 into 4v3.
+      leave 3 skaters; coincidental minors give 4-on-4; a pulled goalie gives 6v5 until a
+      save shows the goalie back; an overtime penalty turns 3-on-3 into 4v3. Game 2 is a
+      preseason game whose overtime is 3-on-3.
     model: int_shots_enriched
     given:
       - input: ref('stg_pwhl__shots')
@@ -184,8 +185,20 @@ unit_tests:
           - {game_id: 1, season_id: 1, event_index: 50, period: 3, game_seconds: 3500,
              shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
              shot_result: on_net, x_location: 500, y_location: 150}
+          # The away team's shot is saved: the home goalie is back, though no change was
+          # recorded, so the home team's next shot is 5v5 again.
+          - {game_id: 1, season_id: 1, event_index: 52, period: 3, game_seconds: 3510,
+             shooting_team_id: 20, is_home_team: false, goalie_player_id: 6,
+             shot_result: on_net, x_location: 100, y_location: 150}
+          - {game_id: 1, season_id: 1, event_index: 54, period: 3, game_seconds: 3520,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
           # Overtime penalty to the away team.
           - {game_id: 1, season_id: 1, event_index: 60, period: 4, game_seconds: 3700,
+             shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
+             shot_result: on_net, x_location: 500, y_location: 150}
+          # Preseason overtime is 3-on-3 too.
+          - {game_id: 2, season_id: 2, event_index: 10, period: 4, game_seconds: 3700,
              shooting_team_id: 10, is_home_team: true, goalie_player_id: 5,
              shot_result: on_net, x_location: 500, y_location: 150}
       - input: ref('stg_pwhl__goals')
@@ -194,9 +207,11 @@ unit_tests:
       - input: ref('stg_pwhl__games')
         rows:
           - {game_id: 1, home_team_id: 10, away_team_id: 20}
+          - {game_id: 2, home_team_id: 10, away_team_id: 20}
       - input: ref('stg_pwhl__seasons')
         rows:
           - {season_id: 1, season_type: regular}
+          - {season_id: 2, season_type: preseason}
       - input: ref('int_penalties_timed')
         rows:
           - {game_id: 1, penalty_id: 1, penalized_team_id: 20, start_event_index: 5,
@@ -223,7 +238,10 @@ unit_tests:
         - {game_id: 1, event_index: 20, skaters_for: 3, skaters_against: 5, strength_state: 3v5}
         - {game_id: 1, event_index: 30, skaters_for: 4, skaters_against: 4, strength_state: 4v4}
         - {game_id: 1, event_index: 50, skaters_for: 6, skaters_against: 5, strength_state: 6v5}
+        - {game_id: 1, event_index: 52, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
+        - {game_id: 1, event_index: 54, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
         - {game_id: 1, event_index: 60, skaters_for: 4, skaters_against: 3, strength_state: 4v3}
+        - {game_id: 2, event_index: 10, skaters_for: 3, skaters_against: 3, strength_state: 3v3}
 
   - name: int_penalties_timed_ends_and_stacks_penalties
     description: >

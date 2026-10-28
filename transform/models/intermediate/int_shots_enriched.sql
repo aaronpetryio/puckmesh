@@ -109,8 +109,6 @@ goalie_change_windows as (
 ),
 
 goalie_pulls as (
-    -- A net is empty from a goalie change with nobody coming in to the team's next change.
-    -- Kept within the period, so a return that wasn't recorded can't run on into the next.
     select
         game_id,
         team_id,
@@ -121,20 +119,61 @@ goalie_pulls as (
     where goalie_in_player_id is null
 ),
 
+goalie_returns as (
+    -- The first shot against the team that shows its goalie back in net: a save, or a goal
+    -- that wasn't into an empty net. Returns often aren't recorded as goalie changes
+    -- (docs/plans/xg-audit.md, 6a: 74 saves were credited to a team we had as pulled).
+    select
+        goalie_pulls.game_id,
+        goalie_pulls.team_id,
+        goalie_pulls.start_event_index,
+        min(flagged.event_index) as goalie_seen_event_index
+    from goalie_pulls
+    inner join flagged
+        on goalie_pulls.game_id = flagged.game_id
+        and goalie_pulls.period = flagged.period
+        and goalie_pulls.team_id != flagged.shooting_team_id
+        and goalie_pulls.start_event_index < flagged.event_index
+    where
+        flagged.shot_result = 'on_net'
+        or (flagged.shot_result = 'goal' and not flagged.is_empty_net)
+    group by goalie_pulls.game_id, goalie_pulls.team_id, goalie_pulls.start_event_index
+),
+
+empty_net_windows as (
+    -- A net is empty from a goalie change with nobody coming in until the team's next
+    -- change or the goalie is seen back in net, whichever comes first (least() skips
+    -- nulls). Kept within the period.
+    select
+        goalie_pulls.game_id,
+        goalie_pulls.team_id,
+        goalie_pulls.period,
+        goalie_pulls.start_event_index,
+        least(
+            goalie_pulls.next_change_event_index, goalie_returns.goalie_seen_event_index
+        ) as end_event_index
+    from goalie_pulls
+    left join goalie_returns
+        on goalie_pulls.game_id = goalie_returns.game_id
+        and goalie_pulls.team_id = goalie_returns.team_id
+        and goalie_pulls.start_event_index = goalie_returns.start_event_index
+),
+
 pull_counts as (
     select
         flagged.game_id,
         flagged.event_index,
-        count_if(goalie_pulls.team_id = flagged.shooting_team_id) > 0 as is_own_net_empty,
-        count_if(goalie_pulls.team_id != flagged.shooting_team_id) > 0 as is_other_net_empty
+        count_if(empty_net_windows.team_id = flagged.shooting_team_id) > 0 as is_own_net_empty,
+        count_if(empty_net_windows.team_id != flagged.shooting_team_id) > 0
+            as is_other_net_empty
     from flagged
-    inner join goalie_pulls
-        on flagged.game_id = goalie_pulls.game_id
-        and flagged.period = goalie_pulls.period
-        and flagged.event_index > goalie_pulls.start_event_index
+    inner join empty_net_windows
+        on flagged.game_id = empty_net_windows.game_id
+        and flagged.period = empty_net_windows.period
+        and flagged.event_index > empty_net_windows.start_event_index
         and (
-            goalie_pulls.next_change_event_index is null
-            or flagged.event_index < goalie_pulls.next_change_event_index
+            empty_net_windows.end_event_index is null
+            or flagged.event_index < empty_net_windows.end_event_index
         )
     group by flagged.game_id, flagged.event_index
 ),
@@ -143,7 +182,8 @@ situation as (
     select
         flagged.game_id,
         flagged.event_index,
-        coalesce(seasons.season_type = 'regular' and flagged.period > 3, false)
+        -- Overtime is 3-on-3 outside the playoffs, preseason included (xg-audit.md, 6a).
+        coalesce(seasons.season_type != 'playoffs' and flagged.period > 3, false)
             as is_three_on_three_overtime,
         coalesce(penalty_counts.own_penalties, 0) as own_penalties,
         coalesce(penalty_counts.other_penalties, 0) as other_penalties,
@@ -164,9 +204,9 @@ situation as (
 
 strength as (
     -- Skaters on the ice for each side (docs/plans/xg-model.md, step 2). In regulation and
-    -- playoff overtime each penalty takes a skater off, never below 3. Regular-season
-    -- overtime is 3-on-3, and a penalty gives the other team an extra skater instead, up
-    -- to 5. A pulled goalie adds a skater.
+    -- playoff overtime each penalty takes a skater off, never below 3. Other overtime is
+    -- 3-on-3, and a penalty gives the other team an extra skater instead, up to 5. A
+    -- pulled goalie adds a skater.
     select
         game_id,
         event_index,
