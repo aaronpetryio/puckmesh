@@ -47,6 +47,10 @@ select
     shots.seconds_since_team_prev_shot,
     coalesce(
         shots.seconds_since_team_prev_shot <= {{ var('rebound_window_seconds') }}, false
-    ) as is_rebound
+    ) as is_rebound,
+
+    shots.skaters_for,
+    shots.skaters_against,
+    shots.strength_state
 from shots
 inner join seasons on shots.season_id = seasons.season_id

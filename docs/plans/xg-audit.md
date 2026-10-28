@@ -514,6 +514,197 @@ group by penalty_class, penalty_minutes, is_power_play_penalty, is_penalty_shot,
 order by penalties desc
 ```
 
+## 6. Strength state check
+
+Strength state (PR #13) disagrees with the league's on-ice lists on 78 of ~1,550 goals. These queries show where, so we can tell rule gaps from noise in the lists. They read the CI build (`dev.ci_gold`, `dev.ci_silver`), which has the new columns before your dev schema does.
+
+### Findings (section 6)
+
+Mismatches against the on-ice lists, out of ~1,550 goals with complete lists:
+
+| Step | Mismatches | What changed |
+|---|---|---|
+| First build | 78 | |
+| After 6a | 51 | An empty net ends when a save or a non-empty-net goal shows the goalie back. Preseason overtime is 3-on-3. |
+| After 6c | 37 | Majors count without the pp flag (majors with game misconducts). Coincidental minors called with a power-play penalty are replaced. A shot in the same second as a call doesn't count it. |
+
+What's left, about 2.4%:
+- **List errors:** about 13 goals, e.g. power-play goals listed 5v5 (games 4, 29, 61, 271), and lists with no penalty nearby (16, 81, 82).
+- **Delayed-penalty goalie pulls:** about 7 goals. The data doesn't record them.
+- **Unexplained:** 2 goals in game 89, where two minors with the pp flag never reached `int_penalties_timed`. Worth a look if strength state matters more later.
+- **Remaining pull and timing edge cases.**
+
+The reconciliation test now fails above 45, so a broken rule shows up in CI.
+
+6b, goal rate by strength state, looks right:
+- 5v5: 7.1%
+- 5v4: 10.8%
+- 5v3: 18.4%
+- 3-on-3 overtime: 14.1%
+- 4v5: 9.8%. Short-handed chances are often breakaways, so this is higher than 5v5.
+
+### 6a. Mismatches by type
+
+`our_state` is what we rebuilt; `listed_state` is the on-ice lists. Look for patterns, e.g. many `5v4` vs `5v5` would mean penalties ending too late.
+
+```sql
+with shots as (
+    select
+        game_id,
+        goal_id,
+        period,
+        strength_state
+    from dev.ci_gold.fct_shots
+    where is_goal
+),
+
+goals as (
+    select
+        game_id,
+        goal_id,
+        is_power_play,
+        is_short_handed,
+        is_empty_net,
+        concat(size(on_ice_for_player_ids), 'v', size(on_ice_against_player_ids)) as listed_state,
+        size(on_ice_for_player_ids) >= 3 and size(on_ice_against_player_ids) >= 3 as is_complete
+    from dev.ci_silver.stg_pwhl__goals
+)
+
+select
+    '6a' as query,
+    shots.strength_state as our_state,
+    goals.listed_state,
+    goals.is_power_play,
+    goals.is_short_handed,
+    goals.is_empty_net,
+    shots.period > 3 as is_overtime,
+    count(*) as goals
+from shots
+inner join goals
+    on shots.game_id = goals.game_id
+    and shots.goal_id = goals.goal_id
+where
+    goals.is_complete
+    and shots.strength_state != goals.listed_state
+group by
+    shots.strength_state,
+    goals.listed_state,
+    goals.is_power_play,
+    goals.is_short_handed,
+    goals.is_empty_net,
+    shots.period > 3
+order by goals desc
+```
+
+### 6b. Goal rate by strength state
+
+Sanity check: power-play shots should score more often than 5v5, short-handed less. Shots at a goalie only.
+
+```sql
+select
+    '6b' as query,
+    strength_state,
+    count(*) as shots_at_goalie,
+    count_if(is_goal) as goals,
+    round(count_if(is_goal) / count(*), 3) as goal_rate
+from dev.ci_gold.fct_shots
+where is_unblocked and not is_empty_net
+group by strength_state
+order by shots_at_goalie desc
+```
+
+### 6c. Penalty mismatches in detail
+
+The 6a mismatches that aren't about pulled goalies (no 6 on either side), each with every penalty called in that game in the 5 minutes before the goal. `side` says whether the penalized team is the scoring team or the other one. `timed_*` is what `int_penalties_timed` made of it; nulls there mean we dropped the penalty.
+
+```sql
+with shots as (
+    select
+        game_id,
+        goal_id,
+        period,
+        game_seconds,
+        shooting_team_id,
+        strength_state
+    from dev.ci_gold.fct_shots
+    where is_goal
+),
+
+goals as (
+    select
+        game_id,
+        goal_id,
+        is_power_play,
+        concat(size(on_ice_for_player_ids), 'v', size(on_ice_against_player_ids)) as listed_state
+    from dev.ci_silver.stg_pwhl__goals
+    where
+        size(on_ice_for_player_ids) between 3 and 5
+        and size(on_ice_against_player_ids) between 3 and 5
+),
+
+penalties as (
+    select
+        game_id,
+        penalty_id,
+        event_index,
+        game_seconds,
+        penalized_team_id,
+        penalty_class,
+        penalty_minutes,
+        is_power_play_penalty
+    from dev.ci_silver.stg_pwhl__penalties
+),
+
+timed as (
+    select
+        penalty_id,
+        start_game_seconds,
+        end_game_seconds,
+        ended_by_goal_event_index
+    from dev.ci_silver.int_penalties_timed
+),
+
+mismatches as (
+    select
+        shots.*,
+        goals.listed_state,
+        goals.is_power_play
+    from shots
+    inner join goals
+        on shots.game_id = goals.game_id
+        and shots.goal_id = goals.goal_id
+    where
+        shots.strength_state != goals.listed_state
+        and shots.strength_state not like '%6%'
+)
+
+select
+    '6c' as query,
+    mismatches.game_id,
+    mismatches.period,
+    mismatches.game_seconds as goal_seconds,
+    mismatches.strength_state as our_state,
+    mismatches.listed_state,
+    mismatches.is_power_play,
+    penalties.game_seconds as called_seconds,
+    case
+        when penalties.penalized_team_id = mismatches.shooting_team_id then 'scoring team'
+        else 'other team'
+    end as side,
+    penalties.penalty_class,
+    penalties.penalty_minutes,
+    penalties.is_power_play_penalty,
+    timed.start_game_seconds as timed_start,
+    timed.end_game_seconds as timed_end,
+    timed.ended_by_goal_event_index as timed_ended_by
+from mismatches
+left join penalties
+    on mismatches.game_id = penalties.game_id
+    and penalties.game_seconds between mismatches.game_seconds - 300 and mismatches.game_seconds
+left join timed on penalties.penalty_id = timed.penalty_id
+order by mismatches.game_id, mismatches.game_seconds, penalties.game_seconds
+```
+
 ## Results
 
 Paste each query's output below, as copied from the results grid.
@@ -722,4 +913,120 @@ query	penalty_class	penalty_minutes	is_power_play_penalty	is_penalty_shot	is_ben
 5d	Minor	2.00	false	false	true	1
 5d	Misconduct	20.00	false	false	false	1
 5d	Match	5.00	false	false	false	1
+```
+
+### 6a
+
+```text
+query	our_state	listed_state	is_power_play	is_short_handed	is_empty_net	is_overtime	goals
+6a	5v6	5v5	false	false	false	false	11
+6a	5v5	5v4	true	false	false	false	10
+6a	5v5	6v5	false	false	false	false	7
+6a	6v5	5v5	false	false	false	false	7
+6a	5v4	5v5	false	false	false	false	5
+6a	5v5	3v3	false	false	false	true	4
+6a	5v4	5v5	true	false	false	false	4
+6a	5v5	4v5	false	true	false	false	3
+6a	5v4	6v4	true	false	false	false	2
+6a	5v4	5v3	true	false	false	false	2
+6a	6v4	5v4	true	false	false	false	2
+6a	4v3	5v4	true	false	false	false	2
+6a	5v5	5v4	false	false	false	false	2
+6a	4v5	5v5	false	false	false	false	1
+6a	4v6	5v6	false	true	true	false	1
+6a	5v5	5v6	false	false	false	false	1
+6a	5v5	6v6	false	false	false	false	1
+6a	3v3	4v4	false	false	false	true	1
+6a	5v5	4v4	false	false	false	false	1
+6a	5v4	4v3	true	false	false	true	1
+6a	4v5	4v4	false	false	false	false	1
+6a	3v4	4v5	false	true	false	false	1
+6a	5v5	3v5	false	false	false	false	1
+6a	5v6	6v4	false	false	true	false	1
+6a	6v3	5v3	true	false	false	false	1
+6a	5v4	3v5	true	false	false	false	1
+6a	5v6	5v5	false	false	true	false	1
+6a	5v5	6v5	true	false	false	false	1
+6a	6v6	5v5	false	false	false	false	1
+6a	4v6	4v5	false	true	true	false	1
+```
+
+### 6b
+
+```text
+query	strength_state	shots_at_goalie	goals	goal_rate
+6b	5v5	15106	1071	0.071
+6b	5v4	2657	287	0.108
+6b	4v5	377	37	0.098
+6b	6v5	370	40	0.108
+6b	3v3	304	43	0.141
+6b	4v4	176	10	0.057
+6b	5v6	85	11	0.129
+6b	5v3	76	14	0.184
+6b	4v3	65	9	0.138
+6b	6v4	48	3	0.063
+6b	3v4	14	2	0.143
+6b	6v6	8	1	0.125
+6b	6v3	3	1	0.333
+6b	3v5	1	0	0
+6b	4v6	1	0	0
+```
+
+### 6c
+
+```text
+query	game_id	period	goal_seconds	our_state	listed_state	is_power_play	called_seconds	side	penalty_class	penalty_minutes	is_power_play_penalty	timed_start	timed_end	timed_ended_by
+6c	4	3	3440	5v4	5v5	true	3421	other team	Minor	2.00	true	3421	3541	109
+6c	5	3	2794	3v4	4v5	false	2745	scoring team	Minor	2.00	false	2745	2865	null
+6c	5	3	2794	3v4	4v5	false	2745	scoring team	Minor	2.00	true	2745	2865	null
+6c	5	3	2794	3v4	4v5	false	2745	other team	Minor	2.00	false	2745	2865	null
+6c	16	2	1226	5v5	5v4	false	null	other team	null	null	null	null	null	null
+6c	29	2	1909	5v4	5v5	true	1817	other team	Minor	2.00	true	1817	1937	94
+6c	39	2	1850	5v4	5v5	false	1748	other team	Minor	2.00	true	1748	1868	null
+6c	61	1	746	5v4	5v5	true	693	other team	Minor	2.00	true	693	813	31
+6c	78	3	2426	5v4	3v5	true	2385	other team	Minor	2.00	true	2385	2505	49
+6c	81	1	283	5v5	5v4	false	103	other team	Minor	2.00	true	103	223	null
+6c	81	3	3594	5v5	4v4	false	null	other team	null	null	null	null	null	null
+6c	82	1	214	5v5	3v5	false	null	other team	null	null	null	null	null	null
+6c	89	2	2015	5v5	5v4	true	1939	other team	Minor	2.00	true	null	null	null
+6c	89	3	3377	5v5	4v5	false	3338	scoring team	Minor	2.00	true	null	null	null
+6c	121	2	2307	4v5	5v5	false	2202	scoring team	Minor	2.00	true	2202	2322	null
+6c	122	3	3241	5v5	5v4	true	3111	other team	Misconduct	10.00	false	null	null	null
+6c	122	3	3241	5v5	5v4	true	3111	other team	Major	5.00	false	null	null	null
+6c	135	3	3068	5v4	5v3	true	3021	other team	Minor	2.00	false	3021	3141	null
+6c	148	2	1414	5v5	5v4	true	1250	other team	Major	5.00	false	null	null	null
+6c	148	2	1414	5v5	5v4	true	1250	other team	Misconduct	10.00	false	null	null	null
+6c	151	3	3387	5v5	5v4	true	3198	scoring team	Minor	2.00	false	3198	3318	null
+6c	151	3	3387	5v5	5v4	true	3267	other team	Minor	2.00	true	3267	3387	null
+6c	161	3	2858	5v5	5v4	true	2710	other team	Major	5.00	false	null	null	null
+6c	161	3	2858	5v5	5v4	true	2710	other team	Misconduct	10.00	false	null	null	null
+6c	164	2	1280	5v4	5v5	false	1005	scoring team	Minor	2.00	true	1005	1125	null
+6c	164	2	1280	5v4	5v5	false	1280	other team	Minor	2.00	true	1280	1400	null
+6c	185	3	3386	5v4	5v5	false	3177	scoring team	Minor	2.00	true	3177	3297	null
+6c	185	3	3386	5v4	5v5	false	3386	other team	Minor	2.00	true	3386	3506	192
+6c	193	3	3333	5v4	5v5	false	3061	scoring team	Minor	2.00	true	3061	3181	null
+6c	193	3	3333	5v4	5v5	false	3300	other team	Minor	2.00	true	3300	3420	null
+6c	201	3	2431	5v4	5v5	false	2431	other team	Minor	2.00	true	2431	2551	null
+6c	213	3	2502	4v3	5v4	true	2210	other team	Minor	2.00	true	2330	2450	null
+6c	213	3	2502	4v3	5v4	true	2210	other team	Minor	2.00	true	2210	2330	null
+6c	213	3	2502	4v3	5v4	true	2484	scoring team	Minor	2.00	false	2484	2604	null
+6c	213	3	2502	4v3	5v4	true	2484	other team	Minor	2.00	false	2484	2604	null
+6c	213	3	2502	4v3	5v4	true	2484	other team	Minor	2.00	true	2484	2604	128
+6c	221	3	3516	5v5	5v4	true	3361	other team	Major	5.00	false	null	null	null
+6c	221	3	3516	5v5	5v4	true	3361	other team	Misconduct	10.00	false	null	null	null
+6c	221	3	3538	5v5	5v4	true	3361	other team	Major	5.00	false	null	null	null
+6c	221	3	3538	5v5	5v4	true	3361	other team	Misconduct	10.00	false	null	null	null
+6c	260	4	3689	3v3	4v4	false	3504	scoring team	Minor	2.00	true	3504	3624	null
+6c	271	2	1557	5v4	5v5	true	1537	other team	Minor	2.00	true	1537	1657	66
+6c	288	3	3154	4v3	5v4	true	3066	other team	Minor	2.00	false	3066	3186	null
+6c	288	3	3154	4v3	5v4	true	3066	other team	Minor	2.00	true	3066	3186	143
+6c	288	3	3154	4v3	5v4	true	3066	scoring team	Minor	2.00	false	3066	3186	null
+6c	338	1	1086	5v5	5v4	true	932	other team	Misconduct	10.00	false	null	null	null
+6c	338	1	1086	5v5	5v4	true	932	other team	Major	5.00	false	null	null	null
+6c	340	3	2578	5v5	5v4	true	2352	other team	Misconduct	10.00	false	null	null	null
+6c	340	3	2578	5v5	5v4	true	2352	scoring team	Minor	2.00	false	2352	2472	null
+6c	340	3	2578	5v5	5v4	true	2352	other team	Major	5.00	false	null	null	null
+6c	340	3	2626	5v5	4v5	false	2352	other team	Minor	2.00	false	2352	2472	null
+6c	340	3	2626	5v5	4v5	false	2352	scoring team	Major	5.00	false	null	null	null
+6c	340	3	2626	5v5	4v5	false	2352	scoring team	Misconduct	10.00	false	null	null	null
 ```

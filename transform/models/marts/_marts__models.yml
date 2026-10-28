@@ -315,3 +315,27 @@ models:
         description: >
           Within rebound_window_seconds (3, in dbt_project.yml) of the same team's previous
           unblocked shot in the period.
+      - name: skaters_for
+        description: >
+          Skaters (not goalies) the shooting team had on the ice, rebuilt from penalties and
+          goalie pulls: 3 to 5, or 6 with its goalie pulled. Approximate; see
+          docs/plans/xg-model.md, step 2.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 3
+                max_value: 6
+      - name: skaters_against
+        description: Skaters the defending team had on the ice, counted the same way.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 3
+                max_value: 6
+      - name: strength_state
+        description: >
+          skaters_for v skaters_against, from the shooting team's side: '5v5', '5v4' on a
+          power play, '4v5' short-handed, '6v5' with its goalie pulled.
+        data_tests: [not_null]

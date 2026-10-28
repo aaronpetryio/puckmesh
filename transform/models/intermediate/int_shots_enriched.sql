@@ -22,6 +22,27 @@ games as (
     from {{ ref('stg_pwhl__games') }}
 ),
 
+seasons as (
+    select
+        season_id,
+        season_type
+    from {{ ref('stg_pwhl__seasons') }}
+),
+
+penalties as (
+    select * from {{ ref('int_penalties_timed') }}
+),
+
+goalie_changes as (
+    select
+        game_id,
+        event_index,
+        period,
+        team_id,
+        goalie_in_player_id
+    from {{ ref('stg_pwhl__goalie_changes') }}
+),
+
 flagged as (
     -- HockeyTech flags an empty net only on the goal event; the shot event usually still
     -- names the pulled goalie, so a missing goalie_player_id finds ~1 in 10 empty-net goals
@@ -54,6 +75,160 @@ attack_side as (
         shot_result != 'blocked'
         and not is_empty_net
     group by game_id, period, shooting_team_id
+),
+
+penalty_counts as (
+    -- Penalties being served at each shot, by team. A penalty covers the events after it
+    -- was called and before it ends: its time running out, or the goal that ended it. A
+    -- shot in the same second as the call doesn't count it: the play was already on, and the
+    -- on-ice lists agree (xg-audit.md, 6c).
+    select
+        flagged.game_id,
+        flagged.event_index,
+        count_if(penalties.penalized_team_id = flagged.shooting_team_id) as own_penalties,
+        count_if(penalties.penalized_team_id != flagged.shooting_team_id) as other_penalties
+    from flagged
+    inner join penalties
+        on flagged.game_id = penalties.game_id
+        and flagged.event_index > penalties.start_event_index
+        and flagged.game_seconds > penalties.start_game_seconds
+        and flagged.game_seconds < penalties.end_game_seconds
+        and (
+            penalties.ended_by_goal_event_index is null
+            or flagged.event_index < penalties.ended_by_goal_event_index
+        )
+    group by flagged.game_id, flagged.event_index
+),
+
+goalie_change_windows as (
+    select
+        *,
+        lead(event_index) over (
+            partition by game_id, team_id
+            order by event_index
+        ) as next_change_event_index
+    from goalie_changes
+),
+
+goalie_pulls as (
+    select
+        game_id,
+        team_id,
+        period,
+        event_index as start_event_index,
+        next_change_event_index
+    from goalie_change_windows
+    where goalie_in_player_id is null
+),
+
+goalie_returns as (
+    -- The first shot against the team that shows its goalie back in net: a save, or a goal
+    -- that wasn't into an empty net. Returns often aren't recorded as goalie changes
+    -- (docs/plans/xg-audit.md, 6b: 74 of 85 shots against a team we had as pulled were
+    -- saved).
+    select
+        goalie_pulls.game_id,
+        goalie_pulls.team_id,
+        goalie_pulls.start_event_index,
+        min(flagged.event_index) as goalie_seen_event_index
+    from goalie_pulls
+    inner join flagged
+        on goalie_pulls.game_id = flagged.game_id
+        and goalie_pulls.period = flagged.period
+        and goalie_pulls.team_id != flagged.shooting_team_id
+        and goalie_pulls.start_event_index < flagged.event_index
+    where
+        flagged.shot_result = 'on_net'
+        or (flagged.shot_result = 'goal' and not flagged.is_empty_net)
+    group by goalie_pulls.game_id, goalie_pulls.team_id, goalie_pulls.start_event_index
+),
+
+empty_net_windows as (
+    -- A net is empty from a goalie change with nobody coming in until the team's next
+    -- change or the goalie is seen back in net, whichever comes first (least() skips
+    -- nulls). Kept within the period.
+    select
+        goalie_pulls.game_id,
+        goalie_pulls.team_id,
+        goalie_pulls.period,
+        goalie_pulls.start_event_index,
+        least(
+            goalie_pulls.next_change_event_index, goalie_returns.goalie_seen_event_index
+        ) as end_event_index
+    from goalie_pulls
+    left join goalie_returns
+        on goalie_pulls.game_id = goalie_returns.game_id
+        and goalie_pulls.team_id = goalie_returns.team_id
+        and goalie_pulls.start_event_index = goalie_returns.start_event_index
+),
+
+pull_counts as (
+    select
+        flagged.game_id,
+        flagged.event_index,
+        count_if(empty_net_windows.team_id = flagged.shooting_team_id) > 0 as is_own_net_empty,
+        count_if(empty_net_windows.team_id != flagged.shooting_team_id) > 0
+            as is_other_net_empty
+    from flagged
+    inner join empty_net_windows
+        on flagged.game_id = empty_net_windows.game_id
+        and flagged.period = empty_net_windows.period
+        and flagged.event_index > empty_net_windows.start_event_index
+        and (
+            empty_net_windows.end_event_index is null
+            or flagged.event_index < empty_net_windows.end_event_index
+        )
+    group by flagged.game_id, flagged.event_index
+),
+
+situation as (
+    select
+        flagged.game_id,
+        flagged.event_index,
+        -- Overtime is 3-on-3 in the regular season and, going by the overtime goals listed
+        -- 3v3 where we had 5v5 (xg-audit.md, 6a), the preseason too.
+        coalesce(
+            seasons.season_type in ('regular', 'preseason') and flagged.period > 3, false
+        )
+            as is_three_on_three_overtime,
+        coalesce(penalty_counts.own_penalties, 0) as own_penalties,
+        coalesce(penalty_counts.other_penalties, 0) as other_penalties,
+        coalesce(pull_counts.is_own_net_empty, false) as is_own_net_empty,
+        -- An empty-net goal means the other team had pulled its goalie, even when the
+        -- change wasn't recorded (e.g. for a delayed penalty).
+        coalesce(pull_counts.is_other_net_empty, false) or flagged.is_empty_net
+            as is_other_net_empty
+    from flagged
+    left join seasons on flagged.season_id = seasons.season_id
+    left join penalty_counts
+        on flagged.game_id = penalty_counts.game_id
+        and flagged.event_index = penalty_counts.event_index
+    left join pull_counts
+        on flagged.game_id = pull_counts.game_id
+        and flagged.event_index = pull_counts.event_index
+),
+
+strength as (
+    -- Skaters on the ice for each side (docs/plans/xg-model.md, step 2). In regulation and
+    -- playoff overtime each penalty takes a skater off, never below 3. Other overtime is
+    -- 3-on-3, and a penalty gives the other team an extra skater instead, up to 5. A
+    -- pulled goalie adds a skater.
+    select
+        game_id,
+        event_index,
+        case
+            when is_three_on_three_overtime
+                then 3 + least(greatest(other_penalties - own_penalties, 0), 2)
+            else 5 - least(own_penalties, 2)
+        end
+        + case when is_own_net_empty then 1 else 0 end as skaters_for,
+        case
+            when is_three_on_three_overtime
+                then 3 + least(greatest(own_penalties - other_penalties, 0), 2)
+            else 5 - least(other_penalties, 2)
+        end
+        + case when is_other_net_empty then 1 else 0 end as skaters_against
+    from situation
 ),
 
 score_state as (
@@ -140,8 +315,15 @@ select
     ) ignore nulls over (
         partition by positioned.game_id, positioned.shooting_team_id, positioned.period
         order by positioned.event_index
-    ) as seconds_since_team_prev_shot
+    ) as seconds_since_team_prev_shot,
+
+    strength.skaters_for,
+    strength.skaters_against,
+    concat(strength.skaters_for, 'v', strength.skaters_against) as strength_state
 from positioned
 inner join score_state
     on positioned.game_id = score_state.game_id
     and positioned.event_index = score_state.event_index
+inner join strength
+    on positioned.game_id = strength.game_id
+    and positioned.event_index = strength.event_index

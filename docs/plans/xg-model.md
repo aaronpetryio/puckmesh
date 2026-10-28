@@ -74,9 +74,9 @@ Already known:
       | Penalty | Takes a skater off? | Ends early on a goal against? |
       |---|---|---|
       | Minor, `pp` = true | Yes | Yes. The penalty that started first ends, on a goal the league flags `is_power_play`. |
-      | Minor, `pp` = false (coincidental) | Yes, so equal minors on both teams give 4v4 | No |
-      | Major or match, `pp` = true | Yes | No |
-      | Major or match, `pp` = false (e.g. fighting) | No; replacements come on | No |
+      | Minor, `pp` = false (coincidental) | Yes, so equal minors on both teams give 4v4. But if a power-play penalty was called at the same moment, they're replaced on the ice. | No |
+      | Major or match | Yes, whatever the `pp` flag says. A major with a game misconduct often has no flag but still creates a power play (audit 6c). | No |
+      | Majors on both teams at the same moment (a fight) | No; replacements come on | No |
       | Misconduct (10 or 20 min), or a penalty-shot penalty | No, whatever the flag says | n/a |
 
     - Why the league's goal flag decides which penalty ends: the league already marks power-play goals. Using that mark avoids circular logic, where whether a penalty ended depends on the strength state we're still computing. The on-ice lists stay an independent check.
@@ -87,13 +87,18 @@ Already known:
     - Short-handed goals end nothing.
     - Penalties carry across period breaks; `game_seconds` already runs on through the game.
     - Regular-season overtime is 3-on-3, so a penalty adds a skater for the other team (4v3) instead of removing one. Playoff overtime is 5-on-5. Confirmed by 5c.
-    - Same-second order: a shot and a penalty in the same second follow `event_index`, not the clock.
+    - Same-second order: a penalty covers shots after it in `event_index` and strictly later on the clock. A shot in the same second as the call doesn't count it; the on-ice lists agree (audit 6c, games 164, 185, 193, 201).
     - Pulled goalies: from `stg_pwhl__goalie_changes`, the team with an empty net counts as 6 skaters (38 goals scored 6v5 in 5c). Delayed-penalty pulls may not be recorded; that's a known gap.
   - **Tests:**
     - Goals' `is_power_play` / `is_short_handed` flags.
     - The on-ice player lists on each goal, which count skaters only (5c). Skip goals whose `against` list is empty (~2.5%), and allow a small mismatch rate: a few lists disagree with the league's own flags.
 - Maybe a rough rush flag (a shot within a few seconds of an event in another zone), if step 1 shows the event timing supports it.
 - Why the features go in dbt: they get tested and documented there, and the ratings and predictions models can reuse them. The Python side reads one table.
+
+- **Built (PR #13):**
+  - `int_penalties_timed`, plus `skaters_for`, `skaters_against` and `strength_state` on `fct_shots`.
+  - Matches the league's on-ice lists on 97.6% of goals (37 mismatches of ~1,550; see [xg-audit.md](xg-audit.md), section 6).
+  - The reconciliation test fails above 45.
 
 ### 3. Training set and baselines
 
