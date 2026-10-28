@@ -30,11 +30,13 @@ def score(is_goal: pd.Series, xg: np.ndarray) -> dict[str, float]:
     }
 
 
+def distance_band(distance_ft: pd.Series) -> pd.Series:
+    return pd.cut(distance_ft, DISTANCE_BANDS, labels=DISTANCE_LABELS, right=False)
+
+
 def calibration_by_distance(shots: pd.DataFrame, xg: np.ndarray) -> pd.DataFrame:
     """Actual vs predicted goal rate per distance band."""
-    bands = pd.cut(
-        shots["distance_ft"], DISTANCE_BANDS, labels=DISTANCE_LABELS, right=False
-    )
+    bands = distance_band(shots["distance_ft"])
     return (
         pd.DataFrame({"band": bands, "is_goal": shots["is_goal"].astype(int), "xg": xg})
         .groupby("band", observed=False)

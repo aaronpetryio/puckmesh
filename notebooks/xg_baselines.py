@@ -24,9 +24,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# A Git folder puts the repo root on sys.path; this covers running from elsewhere.
-repo_root = str(Path.cwd().parent)
-if repo_root not in sys.path:
+# A Git folder usually puts the repo root on sys.path. In case it doesn't, find the
+# nearest folder above the working directory that holds ml/xg/.
+repo_root = next(
+    (
+        str(path)
+        for path in [Path.cwd(), *Path.cwd().parents]
+        if (path / "ml/xg").is_dir()
+    ),
+    None,
+)
+if repo_root and repo_root not in sys.path:
     sys.path.append(repo_root)
 
 from ml.xg import baselines, data, metrics
@@ -98,7 +106,13 @@ display(fig)
 
 # COMMAND ----------
 
-by_distance = metrics.calibration_by_distance(shots, np.zeros(len(shots)))
+by_distance = (
+    shots.assign(band=metrics.distance_band(shots["distance_ft"]))
+    .groupby("band", observed=False)
+    .agg(shots=("is_goal", "size"), goals=("is_goal", "sum"))
+    .assign(actual_rate=lambda df: df["goals"] / df["shots"])
+    .reset_index()
+)
 fig, ax = plt.subplots(figsize=(8, 4))
 ax.bar(by_distance["band"].astype(str), by_distance["actual_rate"], color="steelblue")
 for i, row in by_distance.iterrows():
@@ -144,19 +158,18 @@ display(results.round(4))
 
 # COMMAND ----------
 
+# Dots, not bars: the differences are small, and bars cut off at a raised baseline
+# would exaggerate them.
 fig, ax = plt.subplots(figsize=(9, 4))
 names = list(baselines.BASELINES)
-width = 0.8 / len(folds)
-for i, fold in enumerate(folds):
+for fold in folds:
     fold_results = results[results["test_year"] == fold.test_year].set_index("baseline")
-    ax.bar(
-        np.arange(len(names)) + i * width,
+    ax.plot(
+        names,
         fold_results.loc[names, "log_loss"],
-        width,
+        marker="o",
         label=f"test {fold.test_year}",
     )
-ax.set_xticks(np.arange(len(names)) + width * (len(folds) - 1) / 2, names)
-ax.set_ylim(results["log_loss"].min() * 0.95, results["log_loss"].max() * 1.02)
 ax.set_ylabel("log loss (lower is better)")
 ax.legend()
 ax.set_title("Baselines by test season")

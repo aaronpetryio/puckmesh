@@ -25,10 +25,12 @@ def quality_flag(train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
 
 
 def distance(train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
+    """Logistic regression on a smooth curve (spline) of distance to the net."""
     return _fit_predict(train, test, ["distance_ft"], splines=True)
 
 
 def distance_angle(train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
+    """Logistic regression on splines of distance and angle (~ the 18 Skaters model)."""
     return _fit_predict(train, test, ["distance_ft", "angle_deg"], splines=True)
 
 

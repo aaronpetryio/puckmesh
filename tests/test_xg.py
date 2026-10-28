@@ -33,6 +33,13 @@ def test_folds_chain_forward_without_sharing_games():
     assert set(folds[1].train["season_year"]) == {2024, 2025}
 
 
+def test_folds_reject_a_game_in_two_season_years():
+    shots = make_shots()
+    shots.loc[0, "game_id"] = shots["game_id"].max()
+    with pytest.raises(ValueError, match="more than one season_year"):
+        data.season_folds(shots)
+
+
 def test_league_average_is_the_train_rate():
     shots = make_shots()
     xg = baselines.league_average(shots.iloc[:400], shots.iloc[400:])
@@ -79,8 +86,8 @@ def test_calibration_by_distance_bands_shots():
 
 def test_shots_query_filters_and_uses_schemas():
     sql = data.shots_query("dev.gold", "dev.silver")
-    assert "from dev.gold.fct_shots" in sql
-    assert "dev.silver.stg_pwhl__seasons" in sql
+    assert "from `dev`.`gold`.`fct_shots`" in sql
+    assert "`dev`.`silver`.`stg_pwhl__seasons`" in sql
     assert "shots.is_unblocked" in sql
     assert "not shots.is_empty_net" in sql
     assert "('regular', 'playoffs')" in sql
