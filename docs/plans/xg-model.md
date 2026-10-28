@@ -69,9 +69,17 @@ Already known:
     - sportsdataverse's newer path counts skaters from HockeyTech's shift feed (`modulekit` / `gameshifts`), which we don't fetch. In 2025, 5–8% of its events had implausible counts, and it has no counts for 2024 or 2025 shots.
     - We take the penalty rebuild, which is more careful than the windows. Shifts stay a fallback if the reconciliation fails.
   - **Edge cases to handle:**
-    - Which penalties change strength: the league's `pp` flag on the penalty, which excludes coincidental penalties (5d). Two exceptions override it:
-      - misconducts (10 and 20 min) never change strength;
-      - penalty-shot penalties never change strength, since the shot replaces the power play.
+    - Which penalties change strength. "No power play" doesn't mean "no change in strength": coincidental minors don't create a power play, but they still take a skater off each team (4-on-4).
+
+      | Penalty | Takes a skater off? | Ends early on a goal against? |
+      |---|---|---|
+      | Minor, `pp` = true | Yes | Yes. The penalty that started first ends, on a goal the league flags `is_power_play`. |
+      | Minor, `pp` = false (coincidental) | Yes, so equal minors on both teams give 4v4 | No |
+      | Major or match, `pp` = true | Yes | No |
+      | Major or match, `pp` = false (e.g. fighting) | No; replacements come on | No |
+      | Misconduct (10 or 20 min), or a penalty-shot penalty | No, whatever the flag says | n/a |
+
+    - Why the league's goal flag decides which penalty ends: the league already marks power-play goals. Using that mark avoids circular logic, where whether a penalty ended depends on the strength state we're still computing. The on-ice lists stay an independent check.
     - Double minors are recorded as two 2-minute minors (5d). Two minors on one player at the same moment run back to back (5v4 for 4 minutes), not at once. A power-play goal ends only the one running.
     - Majors and match penalties: run the full 5 minutes whatever happens.
     - Two in the box at most: a third penalty waits until the first one ends, so a team never drops below 3 skaters.
