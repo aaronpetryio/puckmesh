@@ -122,7 +122,8 @@ goalie_pulls as (
 goalie_returns as (
     -- The first shot against the team that shows its goalie back in net: a save, or a goal
     -- that wasn't into an empty net. Returns often aren't recorded as goalie changes
-    -- (docs/plans/xg-audit.md, 6a: 74 saves were credited to a team we had as pulled).
+    -- (docs/plans/xg-audit.md, 6b: 74 of 85 shots against a team we had as pulled were
+    -- saved).
     select
         goalie_pulls.game_id,
         goalie_pulls.team_id,
@@ -182,8 +183,11 @@ situation as (
     select
         flagged.game_id,
         flagged.event_index,
-        -- Overtime is 3-on-3 outside the playoffs, preseason included (xg-audit.md, 6a).
-        coalesce(seasons.season_type != 'playoffs' and flagged.period > 3, false)
+        -- Overtime is 3-on-3 in the regular season and, going by the overtime goals listed
+        -- 3v3 where we had 5v5 (xg-audit.md, 6a), the preseason too.
+        coalesce(
+            seasons.season_type in ('regular', 'preseason') and flagged.period > 3, false
+        )
             as is_three_on_three_overtime,
         coalesce(penalty_counts.own_penalties, 0) as own_penalties,
         coalesce(penalty_counts.other_penalties, 0) as other_penalties,
