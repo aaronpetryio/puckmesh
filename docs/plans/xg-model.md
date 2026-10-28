@@ -122,8 +122,9 @@ Add a scoring step to the daily workflow after dbt. This changes the schedule, s
 
 These are "ask before" items in CLAUDE.md.
 
-1. **New dependencies (open):**
-   - Proposed: `requirements-ml.txt` with scikit-learn, pandas, and mlflow, installed together with `requirements.txt` only in the jobs that need them.
+1. **New dependencies (decided):**
+   - `requirements-ml.txt` with scikit-learn, pandas, and mlflow, created with the first ML code.
+   - Installed in one command with `requirements.txt` (`pip install -r requirements.txt -r requirements-ml.txt`), so pip picks shared versions such as `databricks-sdk` that fit both. Only the jobs that need ML get it.
    - No LightGBM or XGBoost unless a test shows logistic regression falls short.
 2. **Strength state (agreed in principle):**
    - The logic goes in a new intermediate model.
