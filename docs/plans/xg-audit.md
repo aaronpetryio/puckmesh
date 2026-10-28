@@ -518,6 +518,31 @@ order by penalties desc
 
 Strength state (PR #13) disagrees with the league's on-ice lists on 78 of ~1,550 goals. These queries show where, so we can tell rule gaps from noise in the lists. They read the CI build (`dev.ci_gold`, `dev.ci_silver`), which has the new columns before your dev schema does.
 
+### Findings (section 6)
+
+Mismatches against the on-ice lists, out of ~1,550 goals with complete lists:
+
+| Step | Mismatches | What changed |
+|---|---|---|
+| First build | 78 | |
+| After 6a | 51 | An empty net ends when a save or a non-empty-net goal shows the goalie back. Preseason overtime is 3-on-3. |
+| After 6c | 37 | Majors count without the pp flag (majors with game misconducts). Coincidental minors called with a power-play penalty are replaced. A shot in the same second as a call doesn't count it. |
+
+What's left, about 2.4%:
+- **List errors:** about 13 goals, e.g. power-play goals listed 5v5 (games 4, 29, 61, 271), and lists with no penalty nearby (16, 81, 82).
+- **Delayed-penalty goalie pulls:** about 7 goals. The data doesn't record them.
+- **Unexplained:** 2 goals in game 89, where two minors with the pp flag never reached `int_penalties_timed`. Worth a look if strength state matters more later.
+- **Remaining pull and timing edge cases.**
+
+The reconciliation test now fails above 45, so a broken rule shows up in CI.
+
+6b, goal rate by strength state, looks right:
+- 5v5: 7.1%
+- 5v4: 10.8%
+- 5v3: 18.4%
+- 3-on-3 overtime: 14.1%
+- 4v5: 9.8%. Short-handed chances are often breakaways, so this is higher than 5v5.
+
 ### 6a. Mismatches by type
 
 `our_state` is what we rebuilt; `listed_state` is the on-ice lists. Look for patterns, e.g. many `5v4` vs `5v5` would mean penalties ending too late.

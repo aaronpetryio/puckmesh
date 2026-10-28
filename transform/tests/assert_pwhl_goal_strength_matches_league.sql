@@ -2,9 +2,11 @@
 -- on the ice for each goal (the lists count skaters, not goalies). Nothing in the rebuild
 -- reads these lists, so they're an independent check. Goals with a list under 3 players are
 -- skipped: about 2.5% have one side missing. A few lists disagree with the league's own
--- power-play flags, so a small number of mismatches is expected.
+-- power-play flags, and goalie pulls for delayed penalties aren't recorded, so some
+-- mismatches are expected: 37 of ~1,550 goals when this limit was set
+-- (docs/plans/xg-audit.md, section 6). A jump past it means a rule broke.
 -- Returns the goals that don't match.
-{{ config(warn_if='>0', error_if='>80') }}
+{{ config(warn_if='>0', error_if='>45') }}
 
 with shots as (
     select

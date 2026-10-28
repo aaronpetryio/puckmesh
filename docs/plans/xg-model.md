@@ -95,6 +95,11 @@ Already known:
 - Maybe a rough rush flag (a shot within a few seconds of an event in another zone), if step 1 shows the event timing supports it.
 - Why the features go in dbt: they get tested and documented there, and the ratings and predictions models can reuse them. The Python side reads one table.
 
+- **Built (PR #13):**
+  - `int_penalties_timed`, plus `skaters_for`, `skaters_against` and `strength_state` on `fct_shots`.
+  - Matches the league's on-ice lists on 97.6% of goals (37 mismatches of ~1,550; see [xg-audit.md](xg-audit.md), section 6).
+  - The reconciliation test fails above 45.
+
 ### 3. Training set and baselines
 
 - Train on unblocked, non-empty-net shots in regulation and overtime. Leave out shootouts and penalty shots, which are already separate event types.
