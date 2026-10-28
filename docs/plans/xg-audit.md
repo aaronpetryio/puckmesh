@@ -514,6 +514,80 @@ group by penalty_class, penalty_minutes, is_power_play_penalty, is_penalty_shot,
 order by penalties desc
 ```
 
+## 6. Strength state check
+
+Strength state (PR #13) disagrees with the league's on-ice lists on 78 of ~1,550 goals. These queries show where, so we can tell rule gaps from noise in the lists. They read the CI build (`dev.ci_gold`, `dev.ci_silver`), which has the new columns before your dev schema does.
+
+### 6a. Mismatches by type
+
+`our_state` is what we rebuilt; `listed_state` is the on-ice lists. Look for patterns, e.g. many `5v4` vs `5v5` would mean penalties ending too late.
+
+```sql
+with shots as (
+    select
+        game_id,
+        goal_id,
+        period,
+        strength_state
+    from dev.ci_gold.fct_shots
+    where is_goal
+),
+
+goals as (
+    select
+        game_id,
+        goal_id,
+        is_power_play,
+        is_short_handed,
+        is_empty_net,
+        concat(size(on_ice_for_player_ids), 'v', size(on_ice_against_player_ids)) as listed_state,
+        size(on_ice_for_player_ids) >= 3 and size(on_ice_against_player_ids) >= 3 as is_complete
+    from dev.ci_silver.stg_pwhl__goals
+)
+
+select
+    '6a' as query,
+    shots.strength_state as our_state,
+    goals.listed_state,
+    goals.is_power_play,
+    goals.is_short_handed,
+    goals.is_empty_net,
+    shots.period > 3 as is_overtime,
+    count(*) as goals
+from shots
+inner join goals
+    on shots.game_id = goals.game_id
+    and shots.goal_id = goals.goal_id
+where
+    goals.is_complete
+    and shots.strength_state != goals.listed_state
+group by
+    shots.strength_state,
+    goals.listed_state,
+    goals.is_power_play,
+    goals.is_short_handed,
+    goals.is_empty_net,
+    shots.period > 3
+order by goals desc
+```
+
+### 6b. Goal rate by strength state
+
+Sanity check: power-play shots should score more often than 5v5, short-handed less. Shots at a goalie only.
+
+```sql
+select
+    '6b' as query,
+    strength_state,
+    count(*) as shots_at_goalie,
+    count_if(is_goal) as goals,
+    round(count_if(is_goal) / count(*), 3) as goal_rate
+from dev.ci_gold.fct_shots
+where is_unblocked and not is_empty_net
+group by strength_state
+order by shots_at_goalie desc
+```
+
 ## Results
 
 Paste each query's output below, as copied from the results grid.
@@ -722,4 +796,14 @@ query	penalty_class	penalty_minutes	is_power_play_penalty	is_penalty_shot	is_ben
 5d	Minor	2.00	false	false	true	1
 5d	Misconduct	20.00	false	false	false	1
 5d	Match	5.00	false	false	false	1
+```
+
+### 6a
+
+```text
+```
+
+### 6b
+
+```text
 ```
