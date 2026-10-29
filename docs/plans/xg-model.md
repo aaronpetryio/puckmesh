@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: step 6, after deciding on the 3v3 fix (step 5, takeaway 3). See [Decisions](#decisions).
+Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: the 3v3 follow-up (step 5), then step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -210,6 +210,8 @@ Already known:
   1. **Season totals hold up.** Rescaled xG lands within 5% of goals in every season (raw: 7–13% off). Log loss and AUC for 2023-24 sit with the other seasons, so that season isn't odd.
   2. **Long-range drift shows again, in both directions.** At 45–70 ft, 2023-24 scored 4.3% against 2.8% predicted, while 2025-26 scored 2.4% against 3.2%. That fits the known issue from step 4: the long-range goal rate fell each season.
   3. **Strength is right, except 3v3.** Advantage, even and shorthanded match to within 1%. 3v3 (regular-season overtime) scores 43 goals on 25.9 xG, about 3.4 standard deviations high; the model files it as even strength. 5v3 runs high too (13 on 7.9), but that's within noise. A v1.1 candidate: give 3v3 its own strength group.
+
+**Follow-up (v1.1): `is_3v3`.** It's a new forward-selection candidate after `strength`, true when both teams have three skaters. Selection decides on 2025 as before, and the `xg_model_v1` notebook re-runs it. One caveat: the idea came from step 5, which looked at all three seasons, so 2026 isn't fully untouched for this one choice. Overtime scoring at 3v3 is well known in hockey generally, so the risk of fitting to 2026 is small. Results to come.
   4. **The shooters look right.** The top by xG are Stacey, Coyne Schofield, Clark, Spooner, Zumwinkle and Knight. The top finisher by far is Poulin (39 goals on 23.1 xG, +15.9). Three defenders (Shelton, Keller, Jaques) make the top 15 by goals above xG, which fits pooled-model skill bias [13] and point shots through traffic the data can't see. Noted, not fixed.
   5. **The goalies look right.** By GSAx: Desbiens +27.6, Philips +25.4 and Frankel +19.8 are on top; Hensley −16.1 and Osborne −14.9 are at the bottom. Only 11 goalies faced 500+ shots.
 

@@ -195,6 +195,7 @@ display(long_range_by_season.reset_index())
 # MAGIC | `shot_type` | Wrist, snap, slap, backhand, tip, or "Default" (not recorded) |
 # MAGIC | `is_rebound` | The team's previous shot was within a few seconds |
 # MAGIC | `strength` | Advantage, even or shorthanded for the shooting team |
+# MAGIC | `is_3v3` | Three skaters a side (overtime), which `strength` counts as even |
 # MAGIC | `score_diff_capped` | Shooting team's lead, capped at ±3 |
 # MAGIC | `period_group` | 1, 2, 3 or overtime |
 
@@ -369,6 +370,7 @@ variants = {
     "rebound": {"is_rebound": True},
     "power play (5v4)": {"strength_state": "5v4"},
     "shorthanded (4v5)": {"strength_state": "4v5"},
+    "3v3 overtime": {"strength_state": "3v3", "period": 4},
     "from 45 ft": {"distance_ft": 45.0},
 }
 examples = model.add_features(
