@@ -175,7 +175,7 @@ Already known:
   2. **Kept:** shot type ("Default" as its own category), `is_rebound`, and strength as advantage / even / shorthanded. A feature stays only if log loss drops on 2025. **Dropped:** the full `strength_state` (too few shots per cell), `score_diff`, `period`. Also checked, outside the notebook, with no gain above 0.0002: home team, defender shooting, time since the team's previous shot, and how far a rebound moved across the crease. A rush flag would need new dbt work; a v2 candidate.
   3. **Long shots stay over-predicted, and it's the data, not the spline.** The 45–70 ft goal rate fell from 4.3% to 3.3% to 2.4% across the three seasons, so a model trained on older seasons runs high there. Log distance and fewer knots barely move it. Recorded as a known issue.
   4. **Gradient boosting doesn't beat logistic,** so v1 is logistic, as planned. No LightGBM or XGBoost.
-  5. **Rescaling fixes totals, and log loss barely changes.** Each game day's factor comes from earlier days only, shrunk toward 1 with 50 pseudo-goals (set in advance, not tuned) and applied to the log-odds. Whether published xG is rescaled is still to decide (before step 6).
+  5. **Rescaling fixes totals, and log loss barely changes.** Each game day's factor comes from earlier days only, shrunk toward 1 with 50 pseudo-goals (set in advance, not tuned) and applied to the log-odds. Published xG is rescaled (decision 5).
   6. **Sample size changed with the empty-net fix:** 17,940 shots and 1,394 goals now, against the audit's 18,022 and 1,476. The 82 removed are all empty-net goals.
 
 ### 5. Evaluation
@@ -219,6 +219,10 @@ These are "ask before" items in CLAUDE.md.
    - The daily run scores new shots with the saved model, so yesterday's games get xG the next morning.
    - Order: extract → dbt build → score → dbt build of the xG marts.
    - Training stays manual: when the model changes, or once a season.
+5. **Season rescaling (decided: publish rescaled xG, keep raw):**
+   - The site shows rescaled xG, so league totals and GSAx aren't skewed by a shift in the league's goal rate.
+   - The predictions table stores the raw model output next to it, so the rescaling can be checked or undone.
+   - Each game day's factor uses only earlier days, so a published value never depends on later games.
 
 ## Positioning
 
