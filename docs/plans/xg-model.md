@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: step 1 (audit) done, follow-ups pending; see [Decisions](#decisions).
+Status: steps 1–4 done (audit, strength state, baselines, model v1); step 6 next. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -147,7 +147,7 @@ Already known:
 **Built:**
 - **Code:** `ml/xg/model.py` (derived features, the logistic and gradient-boosting fits, forward selection, season rescaling). `shots_query` now joins `fct_games` for `game_date`, which rescaling orders by.
 - **Notebook:** `notebooks/xg_model_v1.py`. Each candidate is a nested MLflow run under one parent run, in the workspace experiment the `experiment` widget names (default `/Users/<you>/puckmesh-xg`). The v1 pipeline is logged to the parent run as an MLflow model. It takes the columns `model.add_features` makes, so scoring calls that first.
-- **Results** (local run of the notebook on dev, 17,940 shots and 1,394 goals; confirm with the Databricks run):
+- **Results** (notebook run on dev in Databricks, MLflow run `605d72af74014d069668756af8eda9d3`; 17,940 shots and 1,394 goals. A local run matched it except for the last digits of gradient boosting, which varies with the scikit-learn version):
 
   | Model | Log loss, test 2025 | AUC, test 2025 | xG/goals, test 2025 | Log loss, test 2026 | AUC, test 2026 | xG/goals, test 2026 |
   |---|---|---|---|---|---|---|
@@ -157,7 +157,7 @@ Already known:
   | + `is_rebound` | 0.2684 | 0.714 | 0.87 | 0.2446 | 0.733 | 1.09 |
   | **+ strength (v1)** | **0.2670** | **0.720** | 0.87 | **0.2442** | **0.738** | 1.10 |
   | v1, rescaled to goals to date | 0.2665 | 0.720 | 0.96 | 0.2440 | 0.737 | 1.00 |
-  | Gradient boosting, v1 features | 0.2698 | 0.701 | 0.88 | 0.2447 | 0.731 | 1.09 |
+  | Gradient boosting, v1 features | 0.2697 | 0.703 | 0.87 | 0.2447 | 0.731 | 1.08 |
 
   Calibration by distance band, v1, test 2026:
 
