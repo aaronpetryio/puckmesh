@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–4 done (audit, strength state, baselines, model v1). Next: the rest of step 5 (top shooters and goalies by xG, strength-state goal rates), then step 6. See [Decisions](#decisions).
+Status: steps 1–4 done (audit, strength state, baselines, model v1). Step 5's sanity checks are built (`notebooks/xg_evaluation.py`); results to come from the Databricks run. Then step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -184,6 +184,11 @@ Already known:
 - **Metrics:** log loss and Brier score first, since xG is a probability. Then calibration plots by distance band and season, and AUC last. Always compare against the baselines.
 - **Sanity checks:** total xG vs goals per season, the top shooters and goalies by xG, and strength-state goal rates.
 - Skill-related bias in pooled xG models is a known issue [13]. Note it; don't solve it in v1.
+
+**Built:**
+- **Code:** `ml/xg/evaluate.py` (shooter and goalie tables, goal rates by any shot column) and `model.out_of_fold` (leave-one-season-out xG). `shots_query` now returns the shooter, shooting team and goalie; `players_query` gives names from `dim_players`. `model.V1_FEATURES` holds what step 4 kept.
+- **Notebook:** `notebooks/xg_evaluation.py`. Each season is scored by v1 fit on the other two, as step 6 will publish past seasons, then rescaled. It shows per-season scores and calibration, goal rates by strength, the top shooters by xG and by goals above xG, and goalies by GSAx. One MLflow run (`xg_evaluation`) holds the scores and the tables as CSVs.
+- **Results:** to come from the Databricks run.
 
 ### 6. Write back and use the predictions
 
