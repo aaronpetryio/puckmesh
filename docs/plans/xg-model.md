@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–4 done (audit, strength state, baselines, model v1). Step 5's sanity checks are built (`notebooks/xg_evaluation.py`); results to come from the Databricks run. Then step 6. See [Decisions](#decisions).
+Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: step 6, after deciding on the 3v3 fix (step 5, takeaway 3). See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -188,7 +188,30 @@ Already known:
 **Built:**
 - **Code:** `ml/xg/evaluate.py` (shooter and goalie tables, goal rates by any shot column) and `model.out_of_fold` (leave-one-season-out xG). `shots_query` now returns the shooter, shooting team and goalie; `players_query` gives names from `dim_players`. `model.V1_FEATURES` holds what step 4 kept.
 - **Notebook:** `notebooks/xg_evaluation.py`. Each season is scored by v1 fit on the other two, as step 6 will publish past seasons, then rescaled. It shows per-season scores and calibration, goal rates by strength, the top shooters by xG and by goals above xG, and goalies by GSAx. One MLflow run (`xg_evaluation`) holds the scores and the tables as CSVs.
-- **Results:** to come from the Databricks run.
+- **Results** (notebook run on dev in Databricks, MLflow run `a44a3d2b0a7041348040a6166f746dc2`). Each season is scored by v1 fit on the other two. Season years: 2024 is 2023-24, 2025 is 2024-25, 2026 is 2025-26.
+
+  | Season | Shots | Goals | Log loss | AUC | xG/goals, raw | xG/goals, rescaled |
+  |---|---|---|---|---|---|---|
+  | 2023-24 | 4,896 | 359 | 0.2421 | 0.710 | 1.07 | 1.04 |
+  | 2024-25 | 5,646 | 474 | 0.2654 | 0.716 | 0.87 | 0.95 |
+  | 2025-26 | 7,398 | 561 | 0.2440 | 0.737 | 1.10 | 1.00 |
+
+  Goal rates by strength, all seasons, rescaled:
+
+  | Strength | Shots | Goals | xG | Actual rate | Predicted |
+  |---|---|---|---|---|---|
+  | Advantage | 2,958 | 323 | 322.2 | 0.109 | 0.109 |
+  | Even | 14,634 | 1,035 | 1,026.8 | 0.071 | 0.070 |
+  | Shorthanded | 348 | 36 | 35.8 | 0.103 | 0.103 |
+  | of which 3v3 (even) | 304 | 43 | 25.9 | 0.141 | 0.085 |
+  | of which 5v3 (advantage) | 74 | 13 | 7.9 | 0.176 | 0.107 |
+
+- **Takeaways:**
+  1. **Season totals hold up.** Rescaled xG lands within 5% of goals in every season (raw: 7–13% off). Log loss and AUC for 2023-24 sit with the other seasons, so that season isn't odd.
+  2. **Long-range drift shows again, in both directions.** At 45–70 ft, 2023-24 scored 4.3% against 2.8% predicted, while 2025-26 scored 2.4% against 3.2%. That fits the known issue from step 4: the long-range goal rate fell each season.
+  3. **Strength is right, except 3v3.** Advantage, even and shorthanded match to within 1%. 3v3 (regular-season overtime) scores 43 goals on 25.9 xG, about 3.4 standard deviations high; the model files it as even strength. 5v3 runs high too (13 on 7.9), but that's within noise. A v1.1 candidate: give 3v3 its own strength group.
+  4. **The shooters look right.** The top by xG are Stacey, Coyne Schofield, Clark, Spooner, Zumwinkle and Knight. The top finisher by far is Poulin (39 goals on 23.1 xG, +15.9). Three defenders (Shelton, Keller, Jaques) make the top 15 by goals above xG, which fits pooled-model skill bias [13] and point shots through traffic the data can't see. Noted, not fixed.
+  5. **The goalies look right.** By GSAx: Desbiens +27.6, Philips +25.4 and Frankel +19.8 are on top; Hensley −16.1 and Osborne −14.9 are at the bottom. Only 11 goalies faced 500+ shots.
 
 ### 6. Write back and use the predictions
 

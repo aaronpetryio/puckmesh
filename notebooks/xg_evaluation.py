@@ -170,7 +170,11 @@ goalies = named(
 goalies_by_season = named(
     evaluate.goalie_table(shots, shots["xg"].to_numpy(), 200, by_season=True)
 ).sort_values(["season_year", "gsax"], ascending=[True, False])
-display(pd.concat([goalies.head(10), goalies.tail(10)]).round(3))
+# Top and bottom 10; with 20 or fewer goalies that's all of them, listed once.
+goalie_ends = (
+    goalies if len(goalies) <= 20 else pd.concat([goalies.head(10), goalies.tail(10)])
+)
+display(goalie_ends.round(3))
 display(goalies_by_season.round(3))
 
 # COMMAND ----------
@@ -250,8 +254,4 @@ print("Top shooters by goals above xG")
 print(top_shooters_finishing[columns["shooters"]].round(2).to_string(index=False))
 print()
 print("Goalies by GSAx, top and bottom 10")
-print(
-    pd.concat([goalies.head(10), goalies.tail(10)])[columns["goalies"]]
-    .round(3)
-    .to_string(index=False)
-)
+print(goalie_ends[columns["goalies"]].round(3).to_string(index=False))
