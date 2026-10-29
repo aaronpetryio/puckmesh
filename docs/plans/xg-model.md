@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–4 done (audit, strength state, baselines, model v1); step 6 next. See [Decisions](#decisions).
+Status: steps 1–4 done (audit, strength state, baselines, model v1). Next: the rest of step 5 (top shooters and goalies by xG, strength-state goal rates), then step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
