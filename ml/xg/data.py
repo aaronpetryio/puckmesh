@@ -52,6 +52,9 @@ select
     shots.game_id,
     games.game_date,
     shots.event_index,
+    shots.shooter_player_id,
+    shots.shooting_team_id,
+    shots.goalie_player_id,
     shots.is_goal,
     {columns}
 from {_quoted(gold_schema)}.`fct_shots` as shots
@@ -63,6 +66,14 @@ where
     shots.is_unblocked
     and not shots.is_empty_net
     and shots.season_type in ('regular', 'playoffs')
+"""  # noqa: S608
+
+
+def players_query(gold_schema: str) -> str:
+    """SQL for player names, to label the shooter and goalie tables."""
+    return f"""
+select player_id, full_name, position
+from {_quoted(gold_schema)}.`dim_players`
 """  # noqa: S608
 
 

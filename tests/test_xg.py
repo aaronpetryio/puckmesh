@@ -1,10 +1,10 @@
-"""Tests for ml.xg: folds, baselines and metrics on synthetic shots."""
+"""Tests for ml.xg: folds, baselines, models, metrics and evaluation tables."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from ml.xg import baselines, data, metrics, model
+from ml.xg import baselines, data, evaluate, metrics, model
 
 
 def make_shots(n: int = 600, seed: int = 0) -> pd.DataFrame:
@@ -92,6 +92,12 @@ def test_shots_query_filters_and_uses_schemas():
     assert "not shots.is_empty_net" in sql
     assert "('regular', 'playoffs')" in sql
     assert "`dev`.`gold`.`fct_games`" in sql
+    assert "shots.shooter_player_id" in sql
+    assert "shots.goalie_player_id" in sql
+
+
+def test_players_query_uses_schema():
+    assert "from `dev`.`gold`.`dim_players`" in data.players_query("dev.gold")
 
 
 def make_model_shots(n: int = 3000, seed: int = 0) -> pd.DataFrame:
@@ -191,3 +197,66 @@ def test_rescale_brings_totals_toward_goals():
     rescaled = model.rescale_to_date(shots, xg)
     goals = shots["is_goal"].sum()
     assert abs(rescaled.sum() / goals - 1) < abs(xg.sum() / goals - 1) / 3
+
+
+def test_out_of_fold_scores_each_season_without_it():
+    shots = make_model_shots()
+    xg = model.out_of_fold(shots, model.V1_FEATURES)
+    assert len(xg) == len(shots)
+    assert ((xg > 0) & (xg < 1)).all()
+    # 2024's xG matches a model fit on 2025-2026 only.
+    is_2024 = shots["season_year"] == 2024
+    fitted = model.fit_logistic(shots[~is_2024], model.V1_FEATURES)
+    assert xg[is_2024] == pytest.approx(model.predict(fitted, shots[is_2024]))
+
+
+def test_out_of_fold_rejects_a_shot_without_a_season():
+    shots = make_model_shots()
+    shots.loc[0, "season_year"] = np.nan
+    with pytest.raises(ValueError, match="no season_year"):
+        model.out_of_fold(shots, model.V1_FEATURES)
+
+
+def make_player_shots() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "season_year": [2025, 2025, 2025, 2026, 2026, 2026],
+            "shooter_player_id": [1, 1, 2, 1, 2, 2],
+            "goalie_player_id": [9, 9, 9, 9, 8, np.nan],
+            "is_goal": [True, False, False, True, True, False],
+            "strength": ["even"] * 4 + ["advantage"] * 2,
+        }
+    )
+
+
+def test_shooter_table_totals_and_filter():
+    shots = make_player_shots()
+    xg = np.full(6, 0.25)
+    table = evaluate.shooter_table(shots, xg, min_shots=3).set_index("player_id")
+    assert table.loc[1, ["shots", "goals"]].tolist() == [3, 2]
+    assert table.loc[1, "goals_above_xg"] == pytest.approx(1.25)
+    by_season = evaluate.shooter_table(shots, xg, min_shots=2, by_season=True)
+    # Player 1 has 1 shot in 2026 and player 2 has 1 in 2025: both filtered out.
+    assert set(zip(by_season["player_id"], by_season["season_year"], strict=True)) == {
+        (1, 2025),
+        (2, 2026),
+    }
+
+
+def test_goalie_table_gsax_drops_shots_without_a_goalie():
+    shots = make_player_shots()
+    xg = np.full(6, 0.25)
+    table = evaluate.goalie_table(shots, xg, min_shots=1).set_index("player_id")
+    assert table["shots_against"].sum() == 5
+    # Goalie 9: 2 goals on 1.0 xG, so 1 goal worse than expected.
+    assert table.loc[9, "gsax"] == pytest.approx(-1.0)
+    assert table.loc[9, "save_pct"] == pytest.approx(0.5)
+    assert table.loc[9, "expected_save_pct"] == pytest.approx(0.75)
+
+
+def test_rates_by_column():
+    shots = make_player_shots()
+    rates = evaluate.rates_by(shots, np.full(6, 0.25), "strength").set_index("strength")
+    assert rates.loc["even", ["shots", "goals"]].tolist() == [4, 2]
+    assert rates.loc["advantage", "actual_rate"] == pytest.approx(0.5)
+    assert rates.loc["advantage", "xg_per_goal"] == pytest.approx(0.5)

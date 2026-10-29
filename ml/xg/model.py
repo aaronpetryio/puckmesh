@@ -33,6 +33,9 @@ FEATURE_STEPS = [
     "period_group",
 ]
 
+# What forward selection kept in step 4 (notebooks/xg_model_v1.py).
+V1_FEATURES = ["shot_type", "is_rebound", "strength"]
+
 
 def add_features(shots: pd.DataFrame) -> pd.DataFrame:
     """Model-ready columns derived from the training set's raw ones.
@@ -130,6 +133,27 @@ def fit_gradient_boosting(train: pd.DataFrame, features: list[str]) -> Pipeline:
 def predict(model: Pipeline, shots: pd.DataFrame) -> np.ndarray:
     """P(goal) for each shot; extra columns in ``shots`` are ignored."""
     return model.predict_proba(shots[model.feature_names_in_])[:, 1]
+
+
+def out_of_fold(shots: pd.DataFrame, features: list[str]) -> np.ndarray:
+    """XG for every shot from a logistic model fit on the other season years.
+
+    Leave-one-season-out: unlike the forward-chaining folds, this scores the first
+    season too, at the cost of training on later seasons. Fine for checking the
+    model; the forward-chaining test scores stay the fair measure.
+
+    Raises:
+        ValueError: A shot has no season year, so no fold would score it.
+    """
+    if shots["season_year"].isna().any():
+        raise ValueError("Some shots have no season_year; check seasons' end_date.")
+    xg = np.empty(len(shots))
+    years = shots["season_year"].to_numpy()
+    for year in np.unique(years):
+        is_test = years == year
+        fitted = fit_logistic(shots[~is_test], features)
+        xg[is_test] = predict(fitted, shots[is_test])
+    return xg
 
 
 def forward_select(
