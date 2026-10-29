@@ -31,7 +31,7 @@ def shots_query(gold_schema: str, silver_schema: str) -> str:
     docs/plans/xg-audit.md, 1a).
 
     Args:
-        gold_schema: Where fct_shots lives, e.g. ``dev.dbt_apetry_gold``.
+        gold_schema: Where fct_shots and fct_games live, e.g. ``dev.dbt_apetry_gold``.
         silver_schema: Where stg_pwhl__seasons lives, e.g. ``dev.dbt_apetry_silver``.
     """
     columns = ",\n    ".join(
@@ -50,12 +50,15 @@ select
     shots.season_type,
     year(seasons.end_date) as season_year,
     shots.game_id,
+    games.game_date,
     shots.event_index,
     shots.is_goal,
     {columns}
 from {_quoted(gold_schema)}.`fct_shots` as shots
 inner join {_quoted(silver_schema)}.`stg_pwhl__seasons` as seasons
     on shots.season_id = seasons.season_id
+inner join {_quoted(gold_schema)}.`fct_games` as games
+    on shots.game_id = games.game_id
 where
     shots.is_unblocked
     and not shots.is_empty_net
