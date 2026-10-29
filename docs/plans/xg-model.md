@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: step 1 (audit) done, follow-ups pending; see [Decisions](#decisions).
+Status: steps 1–4 done (audit, strength state, baselines, model v1). Next: the rest of step 5 (top shooters and goalies by xG, strength-state goal rates), then step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -130,7 +130,7 @@ Already known:
 
 - **Takeaways:**
   1. **Each step adds information, in both test seasons.** Distance + angle cuts log loss 6–7% from the league average, with AUC 0.70–0.72. That's normal for a location-only model of shots on goal: NHL models reach 0.75–0.80, but they also include misses, which are easier to tell apart. It already beats the league's own quality-chance zone.
-  2. **The league's goal rate shifts by season** (8.2% in 2024, 8.4% in 2025, 7.6% in 2026), so total xG runs 5–10% low or high in a new season. League average shows the same, so it's the base rate, not the model. Step 4 tries rescaling each season so xG totals match goals to date. Decide before publishing.
+  2. **The league's goal rate shifts by season** (7.3% in 2024, 8.4% in 2025, 7.6% in 2026; season years, regular season plus playoffs, after the empty-net fix), so total xG runs 5–10% low or high in a new season. League average shows the same, so it's the base rate, not the model. Step 4 tries rescaling each season so xG totals match goals to date. Decide before publishing.
   3. **Long shots are over-predicted:** 3.5% vs 2.4% at 45–70 ft, and 1.8% vs 0 of 241 beyond 70 ft. Likely causes are the remaining coordinate noise and a spline that flattens out too high at the far end. Step 4 tries log-distance or fewer knots.
 - **The bar for model v1** (test 2026): log loss below 0.2489, AUC above 0.716, and calibration close in every distance band.
 
@@ -143,6 +143,40 @@ Already known:
 - Logistic regression with splines on distance and angle, plus shot type, rebound, and strength state.
 - One comparison with gradient boosting (LightGBM or XGBoost) [10]. Keep it only if it clearly beats logistic on held-out data.
 - Empty-net shots get their own model or a fixed value, as Evolving-Hockey and Hockey Alchemy do [10][11].
+
+**Built:**
+- **Code:** `ml/xg/model.py` (derived features, the logistic and gradient-boosting fits, forward selection, season rescaling). `shots_query` now joins `fct_games` for `game_date`, which rescaling orders by.
+- **Notebook:** `notebooks/xg_model_v1.py`. Each candidate is a nested MLflow run under one parent run, in the workspace experiment the `experiment` widget names (default `/Users/<you>/puckmesh-xg`). The v1 pipeline is logged to the parent run as an MLflow model. It takes the columns `model.add_features` makes, so scoring calls that first.
+- **Results** (notebook run on dev in Databricks, MLflow run `605d72af74014d069668756af8eda9d3`; 17,940 shots and 1,394 goals. A local run matched it except for the last digits of gradient boosting, which varies with the scikit-learn version):
+
+  | Model | Log loss, test 2025 | AUC, test 2025 | xG/goals, test 2025 | Log loss, test 2026 | AUC, test 2026 | xG/goals, test 2026 |
+  |---|---|---|---|---|---|---|
+  | Distance + angle (step 3 bar) | 0.2717 | 0.697 | 0.90 | 0.2489 | 0.716 | 1.07 |
+  | Log distance (4 knots) + angle | 0.2710 | 0.701 | 0.90 | 0.2481 | 0.719 | 1.07 |
+  | + shot type | 0.2701 | 0.710 | 0.87 | 0.2475 | 0.722 | 1.07 |
+  | + `is_rebound` | 0.2684 | 0.714 | 0.87 | 0.2446 | 0.733 | 1.09 |
+  | **+ strength (v1)** | **0.2670** | **0.720** | 0.87 | **0.2442** | **0.738** | 1.10 |
+  | v1, rescaled to goals to date | 0.2665 | 0.720 | 0.96 | 0.2440 | 0.737 | 1.00 |
+  | Gradient boosting, v1 features | 0.2697 | 0.703 | 0.87 | 0.2447 | 0.731 | 1.08 |
+
+  Calibration by distance band, v1, test 2026:
+
+  | Band | Shots | Goals | Actual rate | Predicted | Rescaled |
+  |---|---|---|---|---|---|
+  | 0–10 ft | 827 | 133 | 0.161 | 0.184 | 0.169 |
+  | 10–20 ft | 1,625 | 195 | 0.120 | 0.124 | 0.113 |
+  | 20–30 ft | 1,284 | 114 | 0.089 | 0.081 | 0.073 |
+  | 30–45 ft | 1,682 | 77 | 0.046 | 0.054 | 0.049 |
+  | 45–70 ft | 1,739 | 42 | 0.024 | 0.035 | 0.032 |
+  | 70+ ft | 241 | 0 | 0.000 | 0.021 | 0.019 |
+
+- **Takeaways:**
+  1. **v1 clears the bar:** log loss 0.2442 and AUC 0.738 on 2026, against 0.2489 and 0.716. Every choice (distance form, features, logistic vs boosting) was made on 2025 with a model trained on 2024; 2026 played no part, so it's a fair test. Rebounds help most, then strength, then shot type.
+  2. **Kept:** shot type ("Default" as its own category), `is_rebound`, and strength as advantage / even / shorthanded. A feature stays only if log loss drops on 2025. **Dropped:** the full `strength_state` (too few shots per cell), `score_diff`, `period`. Also checked, outside the notebook, with no gain above 0.0002: home team, defender shooting, time since the team's previous shot, and how far a rebound moved across the crease. A rush flag would need new dbt work; a v2 candidate.
+  3. **Long shots stay over-predicted, and it's the data, not the spline.** The 45–70 ft goal rate fell from 4.3% to 3.3% to 2.4% across the three seasons, so a model trained on older seasons runs high there. Log distance and fewer knots barely move it. Recorded as a known issue.
+  4. **Gradient boosting doesn't beat logistic,** so v1 is logistic, as planned. No LightGBM or XGBoost.
+  5. **Rescaling fixes totals, and log loss barely changes.** Each game day's factor comes from earlier days only, shrunk toward 1 with 50 pseudo-goals (set in advance, not tuned) and applied to the log-odds. Published xG is rescaled (decision 5).
+  6. **Sample size changed with the empty-net fix:** 17,940 shots and 1,394 goals now, against the audit's 18,022 and 1,476. The 82 removed are all empty-net goals.
 
 ### 5. Evaluation
 
@@ -185,6 +219,10 @@ These are "ask before" items in CLAUDE.md.
    - The daily run scores new shots with the saved model, so yesterday's games get xG the next morning.
    - Order: extract → dbt build → score → dbt build of the xG marts.
    - Training stays manual: when the model changes, or once a season.
+5. **Season rescaling (decided: publish rescaled xG, keep raw):**
+   - The site shows rescaled xG, so league totals and GSAx aren't skewed by a shift in the league's goal rate.
+   - The predictions table stores the raw model output next to it, so the rescaling can be checked or undone.
+   - Each game day's factor uses only earlier days, so a published value never depends on later games.
 
 ## Positioning
 
