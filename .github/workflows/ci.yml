@@ -54,10 +54,11 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements.txt
+            requirements-ml.txt
             requirements-dev.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-ml.txt -r requirements-dev.txt
 
       - name: pytest
         run: python -m pytest

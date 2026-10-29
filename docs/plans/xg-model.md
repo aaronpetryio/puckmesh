@@ -102,6 +102,39 @@ Already known:
 
 ### 3. Training set and baselines
 
+**Built:**
+- **Code:** `ml/xg/` (training set query, forward-chaining season folds, four baselines, metrics).
+- **Notebook:** `notebooks/xg_baselines.py`, which shows the data, the baselines, calibration, an xG map, and the shots where the model and reality disagree.
+- **Running it:** in Databricks, through a Git folder. The scheduled pipeline never runs the notebook; daily scoring (step 7) will call the same modules from GitHub Actions.
+- **Results** (notebook run on dev, after the empty-net and strength fixes):
+
+  | Baseline | Log loss, test 2025 | AUC, test 2025 | xG/goals, test 2025 | Log loss, test 2026 | AUC, test 2026 | xG/goals, test 2026 |
+  |---|---|---|---|---|---|---|
+  | League average | 0.2891 | 0.500 | 0.87 | 0.2685 | 0.500 | 1.04 |
+  | Quality flag | 0.2786 | 0.630 | 0.88 | 0.2564 | 0.647 | 1.05 |
+  | Distance | 0.2752 | 0.674 | 0.89 | 0.2510 | 0.702 | 1.06 |
+  | Distance + angle | 0.2717 | 0.697 | 0.90 | 0.2489 | 0.716 | 1.07 |
+
+  Test sets: 5,646 shots and 474 goals in 2025; 7,398 shots and 561 goals in 2026.
+
+  Calibration by distance band, distance + angle, test 2026:
+
+  | Band | Shots | Goals | Actual rate | Predicted rate |
+  |---|---|---|---|---|
+  | 0–10 ft | 827 | 133 | 0.161 | 0.165 |
+  | 10–20 ft | 1,625 | 195 | 0.120 | 0.129 |
+  | 20–30 ft | 1,284 | 114 | 0.089 | 0.077 |
+  | 30–45 ft | 1,682 | 77 | 0.046 | 0.052 |
+  | 45–70 ft | 1,739 | 42 | 0.024 | 0.035 |
+  | 70+ ft | 241 | 0 | 0.000 | 0.018 |
+
+- **Takeaways:**
+  1. **Each step adds information, in both test seasons.** Distance + angle cuts log loss 6–7% from the league average, with AUC 0.70–0.72. That's normal for a location-only model of shots on goal: NHL models reach 0.75–0.80, but they also include misses, which are easier to tell apart. It already beats the league's own quality-chance zone.
+  2. **The league's goal rate shifts by season** (8.2% in 2024, 8.4% in 2025, 7.6% in 2026), so total xG runs 5–10% low or high in a new season. League average shows the same, so it's the base rate, not the model. Step 4 tries rescaling each season so xG totals match goals to date. Decide before publishing.
+  3. **Long shots are over-predicted:** 3.5% vs 2.4% at 45–70 ft, and 1.8% vs 0 of 241 beyond 70 ft. Likely causes are the remaining coordinate noise and a spline that flattens out too high at the far end. Step 4 tries log-distance or fewer knots.
+- **The bar for model v1** (test 2026): log loss below 0.2489, AUC above 0.716, and calibration close in every distance band.
+
+
 - Train on unblocked, non-empty-net shots in regulation and overtime. Leave out shootouts and penalty shots, which are already separate event types.
 - Baselines to beat: league-average goal rate, then distance only, then distance + angle (roughly the 18 Skaters model [1]).
 

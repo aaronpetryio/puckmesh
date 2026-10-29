@@ -38,9 +38,13 @@ dotenv -f ../.env run -- dbt build          # everything
 Checks that need no warehouse, from the repo root:
 
 ```bash
+pip install -r requirements.txt -r requirements-ml.txt -r requirements-dev.txt   # once, e.g. in a fresh cloud container
+git add <new files>                         # pre-commit --all-files only checks tracked files
 pre-commit run --all-files                  # ruff, sqlfluff, yamllint, ... (CI's lint job)
-python -m pytest                            # extract/ unit tests
+python -m pytest                            # extract/ and ml/ unit tests
 ```
+
+xG notebooks run in Databricks, by hand: clone the repo as a Git folder in the workspace, open `notebooks/xg_baselines`, check the schema widgets, Run all.
 
 **Verify before saying done.** Run the checks above. For dbt changes, also `dbt build --select` the changed models plus downstream and report the result. If you can't run it (no `.env` or Databricks access, e.g. in a cloud session), say so plainly. Don't claim it works. Report failures with their output.
 
@@ -51,6 +55,8 @@ In a cloud session without Databricks access, push the branch and open the PR: C
 Style rules (naming, SQL layout, YAML, tests, Python) are in `docs/style-guide/`, and the linters enforce most of them. When this file and the guide disagree, the guide wins; fix this file. The points below are the ones that come up most.
 
 - `extract/`: `client.py` (HockeyTech client), `endpoints/` (one module per endpoint: `NAME`, `fetch()`, and helpers that read its response; only that module knows the response's shape), `raw.py` (save locally, skip unchanged by content hash), `upload.py` → Volume, `load.py` → `COPY INTO`, `db.py` (warehouse connection and settings; read environment variables here, not elsewhere), `pipeline.py` (daily/full runs), `__main__.py` (CLI; add new subcommands here). Tests in `tests/`.
+- `ml/xg/`: expected-goals model code as plain modules (`data.py` training set and folds, `baselines.py`, `metrics.py`), unit-tested in `tests/`. No plotting, no warehouse access of its own: callers run the SQL it returns. Dependencies in `requirements-ml.txt`.
+- `notebooks/`: Databricks notebooks in source format (`.py`), for exploring and comparing models by hand. They call `ml/xg/` and draw charts; never part of the scheduled pipeline.
 - `transform/models/`
   - `staging/<league>/`: `stg_<league>__<entity>s`, views in silver. Parse VARIANT, cast, rename, dedupe to the latest fetch. No joins, aggregation, or business logic.
   - `staging/<league>/base/`: shared parsing that several staging models build on (e.g. play-by-play events).
