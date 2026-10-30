@@ -46,16 +46,29 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-ml.txt
 
       - name: Extract, upload, load (${{ env.MODE }})
         run: python -m extract run --mode "$MODE"
+
+      # fct_shots reads prod.ml.xg_predictions, so it has to exist before dbt runs.
+      - name: xG predictions table (create if missing)
+        run: python -m ml.xg setup --target prod
 
       - name: dbt build (prod)
         working-directory: transform
         run: |
           dbt deps
           dbt build --target prod
+
+      # Scores the current season with the registered model (python -m ml.xg train
+      # registers it, by hand), then rebuilds what reads the predictions.
+      - name: Score xG
+        run: python -m ml.xg score --target prod
+
+      - name: dbt build (xG)
+        working-directory: transform
+        run: dbt build --target prod --select stg_ml__xg_predictions+
 
       - name: Keep dbt logs and results
         if: always()

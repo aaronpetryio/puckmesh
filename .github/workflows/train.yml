@@ -1,0 +1,57 @@
+name: train xG
+
+# By hand only, once a season ends: writes out-of-fold xG for every completed season to
+# prod.ml.xg_predictions and registers a model fit on all of them as
+# prod.ml.xg_model@champion, which the daily pipeline then scores new games with.
+# Runs here, not on a laptop, so training and scoring share requirements-ml.txt's
+# pinned scikit-learn. See docs/plans/xg-model.md, steps 6 and 7.
+on:
+  workflow_dispatch:
+    inputs:
+      through_season:
+        description: Last completed season year (2026 is the 2025-26 season)
+        required: true
+        type: number
+
+# Shares the pipeline's group: training and the daily run never write at once.
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DBT_SCHEMA: ci
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      THROUGH_SEASON: ${{ inputs.through_season }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-ml.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-ml.txt
+
+      - name: Train, backfill, register
+        run: python -m ml.xg train --target prod --through-season "$THROUGH_SEASON"
+
+      - name: dbt build (xG)
+        working-directory: transform
+        run: |
+          dbt deps
+          dbt build --target prod --select stg_ml__xg_predictions+

@@ -30,6 +30,10 @@ vars:
   # A shot this soon after the same team's previous unblocked shot counts as a rebound.
   rebound_window_seconds: 3
 
+  # The xG model fct_shots publishes. Same value as MODEL_VERSION in ml/xg/model.py;
+  # change both together.
+  xg_model_version: v1.1
+
 # Bronze is the raw catalog (raw.<league>.<endpoint>), loaded by extract/load.py
 # and declared as dbt sources. dbt builds silver and gold only.
 # Folders map to schemas. In dev these get your prefix (dev.dbt_apetry_silver);

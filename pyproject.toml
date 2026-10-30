@@ -36,6 +36,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # The command line entry point is where printing to the terminal belongs.
 "extract/__main__.py" = ["T20"]
+"ml/xg/__main__.py" = ["T20"]
 "tests/**" = ["S101", "D", "ANN"]
 # Databricks notebooks in source format: the runtime provides spark, display and
 # dbutils; the first markdown cell stands in for a module docstring; print is output.

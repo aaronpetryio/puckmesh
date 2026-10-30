@@ -7,6 +7,15 @@ seasons as (
         season_id,
         season_type
     from {{ ref('stg_pwhl__seasons') }}
+),
+
+xg_predictions as (
+    select
+        game_id,
+        event_index,
+        xg,
+        xg_raw
+    from {{ ref('stg_ml__xg_predictions') }}
 )
 
 select
@@ -51,6 +60,14 @@ select
 
     shots.skaters_for,
     shots.skaters_against,
-    shots.strength_state
+    shots.strength_state,
+
+    xg_predictions.xg,
+    xg_predictions.xg_raw
 from shots
 inner join seasons on shots.season_id = seasons.season_id
+-- Left: blocked, empty-net and preseason shots aren't scored, and new shots wait for
+-- the next scoring run.
+left join xg_predictions
+    on shots.game_id = xg_predictions.game_id
+    and shots.event_index = xg_predictions.event_index

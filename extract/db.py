@@ -21,6 +21,11 @@ def connect() -> Connection:
     )
 
 
+def dbt_schema() -> str:
+    """Your dev schema prefix (dev.<DBT_SCHEMA>_gold), as dbt's dev target uses it."""
+    return os.environ["DBT_SCHEMA"]
+
+
 def raw_catalog() -> str:
     return os.environ.get("RAW_CATALOG", "raw")
 

@@ -45,6 +45,7 @@ def shots_query(gold_schema: str, silver_schema: str) -> str:
     # notebook's own widgets (trusted config) and are backtick-quoted.
     return f"""
 select
+    shots.league_id,
     shots.season_id,
     seasons.season_name,
     shots.season_type,

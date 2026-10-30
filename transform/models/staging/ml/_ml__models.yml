@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: stg_ml__xg_predictions
+    description: >
+      One row per scored shot: the published xG of the model version set by the
+      xg_model_version var. Shots at a goalie in the regular season and playoffs only.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, event_index]
+    columns:
+      - name: game_id
+        data_tests: [not_null]
+      - name: event_index
+        data_tests: [not_null]
+      - name: xg
+        data_tests: [not_null]
