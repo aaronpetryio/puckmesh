@@ -29,6 +29,7 @@ FEATURE_STEPS = [
     "shot_type",
     "is_rebound",
     "strength",
+    "is_3v3",
     "score_diff_capped",
     "period_group",
 ]
@@ -44,6 +45,9 @@ def add_features(shots: pd.DataFrame) -> pd.DataFrame:
       spreads out for the spline.
     - ``strength``: advantage, even or shorthanded, from ``strength_state`` (``5v4``
       for/against). The full state has too few shots in most cells (e.g. 74 at 5v3).
+    - ``is_3v3``: three skaters a side, almost always regular-season overtime.
+      ``strength`` counts it as even, but it scores far more often (step 5: 43 goals
+      on 25.9 xG).
     - ``score_diff_capped``: capped at +/-3, since larger leads are rare.
     - ``period_group``: 1, 2, 3 or OT; overtime periods are few and alike.
     """
@@ -55,6 +59,7 @@ def add_features(shots: pd.DataFrame) -> pd.DataFrame:
             ["advantage", "shorthanded"],
             "even",
         ),
+        is_3v3=shots["strength_state"] == "3v3",
         score_diff_capped=shots["score_diff"].clip(-3, 3),
         period_group=np.where(shots["period"] > 3, "OT", shots["period"].astype(str)),
     )

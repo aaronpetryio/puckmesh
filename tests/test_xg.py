@@ -141,6 +141,7 @@ def test_add_features_maps_strength_and_caps():
         "advantage",
         "even",
     ]
+    assert features["is_3v3"].tolist() == [False, False, False, False, True]
     assert features["score_diff_capped"].tolist() == [-3, 0, 2, 3, 0]
     assert features["period_group"].tolist() == ["1", "2", "3", "OT", "OT"]
     assert features["log_distance"].iloc[0] == 0
