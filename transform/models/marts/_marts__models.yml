@@ -359,3 +359,87 @@ models:
               arguments:
                 min_value: 0
                 max_value: 1
+
+  - name: fct_goalie_games
+    description: >
+      One row per goalie per game played (started, came in, or faced a shot), regular season
+      and playoffs, with goals saved above expected (GSAx). Counts cover shots on goal at the
+      goalie that have xG: no empty-net goals, penalty shots, or shootout attempts, and no
+      shots still waiting for the next xG scoring run (docs/plans/metrics.md, step 1).
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, player_id]
+    columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
+      - name: game_id
+        description: "{{ doc('game_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_games')
+                field: game_id
+      - name: player_id
+        description: The goalie. Warns if the goalie never appears on a roster.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_players')
+                field: player_id
+              config:
+                severity: warn
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+      - name: season_type
+        description: regular or playoffs. Preseason has no xG, so it's left out.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [regular, playoffs]
+      - name: game_date
+        description: Date played, as the schedule lists it.
+      - name: team_id
+        description: The goalie's team in this game.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
+      - name: opponent_team_id
+        description: The other team in the game.
+      - name: is_home_team
+        description: The goalie's team is the home team.
+      - name: is_starter
+        description: The first goalie in net for the team, from the goalie changes.
+      - name: shots_faced
+        description: >
+          Shots on goal at this goalie that have xG. Shots name the goalie in net, so a
+          mid-game change splits the game's shots between the two goalies.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+      - name: goals_allowed
+        description: Goals among those shots.
+        data_tests: [not_null]
+      - name: xg_faced
+        description: >
+          Sum of xG on those shots, using the published (rescaled) xG from fct_shots, so a
+          shift in the league's goal rate doesn't move every goalie (docs/plans/xg-model.md,
+          decision 5).
+        data_tests: [not_null]
+      - name: gsax
+        description: >
+          Goals saved above expected: xg_faced minus goals_allowed. Positive means fewer goals
+          allowed than an average goalie would on the same shots.
+      - name: gsax_per_100_shots
+        description: >
+          GSAx per 100 shots faced. Per 100 rather than per shot only so the numbers are
+          readable (per shot they are around 0.01). Null with no shots faced.
