@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: re-run `xg_evaluation` to confirm the 3v3 fix (step 5, follow-up), then step 6. See [Decisions](#decisions).
+Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -232,6 +232,7 @@ Already known:
   - **Both are kept by the rule, set in advance:** a feature stays if 2025 log loss drops. `period_group`, dropped in step 4, now helps. With 3v3 split out, its overtime level mostly describes playoff overtime, which is 5v5.
   - **The gains are tiny,** 0.0002 each, and 2026 is unchanged (0.2443 against 0.2442). That's expected: 3v3 is under 2% of shots, so log loss over every shot can't show much. The fix is about getting overtime xG right for the players who play it. `xg_evaluation`'s 3v3 row is the check.
   - **v1.1 is now `model.V1_FEATURES`**, the model step 6 publishes. Following the rule rather than hand-picking keeps the choice honest; the 2026 test shows it costs nothing.
+  - **The fix works.** `xg_evaluation` re-run with v1.1 (MLflow run `9df459a0f57f405982a3bec8c14903b2`): 3v3 is now 43 goals on 42.7 xG, against 25.9 before. Advantage, even and shorthanded still match to within 1.5%, and season totals, calibration and the shooter and goalie leaders barely move (e.g. Desbiens +27.9 GSAx, Poulin +15.9). Still off, but on few shots: 5v3 (13 goals on 7.9 xG, 74 shots) and 4v4 (10 on 12.4, 175 shots).
   4. **The shooters look right.** The top by xG are Stacey, Coyne Schofield, Clark, Spooner, Zumwinkle and Knight. The top finisher by far is Poulin (39 goals on 23.1 xG, +15.9). Three defenders (Shelton, Keller, Jaques) make the top 15 by goals above xG, which fits pooled-model skill bias [13] and point shots through traffic the data can't see. Noted, not fixed.
   5. **The goalies look right.** By GSAx: Desbiens +27.6, Philips +25.4 and Frankel +19.8 are on top; Hensley −16.1 and Osborne −14.9 are at the bottom. Only 11 goalies faced 500+ shots.
 
