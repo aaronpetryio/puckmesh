@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: the 3v3 follow-up (step 5), then step 6. See [Decisions](#decisions).
+Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: re-run `xg_evaluation` to confirm the 3v3 fix (step 5, follow-up), then step 6. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -211,7 +211,27 @@ Already known:
   2. **Long-range drift shows again, in both directions.** At 45–70 ft, 2023-24 scored 4.3% against 2.8% predicted, while 2025-26 scored 2.4% against 3.2%. That fits the known issue from step 4: the long-range goal rate fell each season.
   3. **Strength is right, except 3v3.** Advantage, even and shorthanded match to within 1%. 3v3 (regular-season overtime) scores 43 goals on 25.9 xG, about 3.4 standard deviations high; the model files it as even strength. 5v3 runs high too (13 on 7.9), but that's within noise. A v1.1 candidate: give 3v3 its own strength group.
 
-**Follow-up (v1.1): `is_3v3`.** It's a new forward-selection candidate after `strength`, true when both teams have three skaters. Selection decides on 2025 as before, and the `xg_model_v1` notebook re-runs it. One caveat: the idea came from step 5, which looked at all three seasons, so 2026 isn't fully untouched for this one choice. Overtime scoring at 3v3 is well known in hockey generally, so the risk of fitting to 2026 is small. Results to come.
+**Follow-up (v1.1): `is_3v3`.** It's a new forward-selection candidate after `strength`, true when both teams have three skaters. Selection decides on 2025 as before, and the `xg_model_v1` notebook re-runs it. One caveat: the idea came from step 5, which looked at all three seasons, so 2026 isn't fully untouched for this one choice. Overtime scoring at 3v3 is well known in hockey generally, so the risk of fitting to 2026 is small.
+
+  Results (notebook run on dev in Databricks, MLflow run `f3a40e5b39cb406383495de7225ac5a2`):
+
+  | Step | Kept | Log loss, test 2025 | AUC, test 2025 |
+  |---|---|---|---|
+  | + strength (v1) | yes | 0.2670 | 0.720 |
+  | + `is_3v3` | yes | 0.2668 | 0.721 |
+  | + `score_diff_capped` | no | 0.2669 | 0.720 |
+  | + `period_group` | yes | 0.2666 | 0.721 |
+
+  | Model | Log loss, test 2026 | AUC, test 2026 | xG/goals, test 2026 |
+  |---|---|---|---|
+  | v1 (shot type, rebound, strength) | 0.2442 | 0.738 | 1.10 |
+  | v1.1 (+ `is_3v3`, `period_group`) | 0.2443 | 0.738 | 1.10 |
+  | v1.1, rescaled | 0.2441 | 0.737 | 1.00 |
+  | Gradient boosting, v1.1 features | 0.2446 | 0.733 | 1.08 |
+
+  - **Both are kept by the rule, set in advance:** a feature stays if 2025 log loss drops. `period_group`, dropped in step 4, now helps. With 3v3 split out, its overtime level mostly describes playoff overtime, which is 5v5.
+  - **The gains are tiny,** 0.0002 each, and 2026 is unchanged (0.2443 against 0.2442). That's expected: 3v3 is under 2% of shots, so log loss over every shot can't show much. The fix is about getting overtime xG right for the players who play it. `xg_evaluation`'s 3v3 row is the check.
+  - **v1.1 is now `model.V1_FEATURES`**, the model step 6 publishes. Following the rule rather than hand-picking keeps the choice honest; the 2026 test shows it costs nothing.
   4. **The shooters look right.** The top by xG are Stacey, Coyne Schofield, Clark, Spooner, Zumwinkle and Knight. The top finisher by far is Poulin (39 goals on 23.1 xG, +15.9). Three defenders (Shelton, Keller, Jaques) make the top 15 by goals above xG, which fits pooled-model skill bias [13] and point shots through traffic the data can't see. Noted, not fixed.
   5. **The goalies look right.** By GSAx: Desbiens +27.6, Philips +25.4 and Frankel +19.8 are on top; Hensley −16.1 and Osborne −14.9 are at the bottom. Only 11 goalies faced 500+ shots.
 
