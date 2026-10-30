@@ -32,10 +32,14 @@ python -m extract <endpoint> --all          # schedule | teams | roster | play-b
 python -m ml.xg score                       # score the current season with the registered xG model (dev)
 python -m ml.xg train --through-season 2026 # once a season ends: backfill xG, register a new model (dev)
 cd transform
-dotenv -f ../.env run -- dbt deps           # first time, or after changing packages.yml
-dotenv -f ../.env run -- dbt build --select <model>+   # build a model and everything downstream, with tests
-dotenv -f ../.env run -- dbt build          # everything
+python -m dotenv -f ../.env run -- dbt deps    # first time, or after changing packages.yml
+python -m dotenv -f ../.env run -- dbt build   # everything; do this once after pulling
+python -m dotenv -f ../.env run -- dbt build --select <model>+   # a model and everything downstream, with tests
 ```
+
+`python -m dotenv`, not the bare `dotenv` command: a `dotenv` installed in another Python (e.g. globally on Windows) starts that Python's `python`, without this project's packages. `python -m ml.xg` and `python -m extract` load `.env` themselves.
+
+`--select <model>+` rebuilds only that model and what's downstream; upstream models stay as you last built them. Your dev views keep the SQL of your last build, so after pulling changes, run one full `dbt build` first, or a selective build can test new code against old upstream logic.
 
 Checks that need no warehouse, from the repo root:
 

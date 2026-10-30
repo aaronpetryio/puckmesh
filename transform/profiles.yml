@@ -1,6 +1,6 @@
 # Project-local profile: dbt reads profiles.yml from the working directory first,
 # so run dbt from transform/. No secrets here; everything comes from the environment
-# (load ../.env with: dotenv -f ../.env run -- dbt build).
+# (load ../.env with: python -m dotenv -f ../.env run -- dbt build).
 puckmesh:
   target: dev
   outputs:

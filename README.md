@@ -85,8 +85,8 @@ python -m extract play-by-play --all   # data/raw/pwhl/play_by_play/season_id=<n
 python -m extract upload               # copies new files to /Volumes/raw/pwhl/landing/
 python -m extract load                 # COPY INTO raw.pwhl.<endpoint> (only new files)
 cd transform
-dotenv -f ../.env run -- dbt deps      # first time, or after changing packages.yml
-dotenv -f ../.env run -- dbt build     # sources → staging, plus tests
+python -m dotenv -f ../.env run -- dbt deps    # first time, or after changing packages.yml
+python -m dotenv -f ../.env run -- dbt build   # sources → staging, plus tests
 ```
 
 ---
