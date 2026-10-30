@@ -198,19 +198,39 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
 **Score-and-venue adjustment (McCurdy's method).**
 - Trailing teams shoot more and home teams shoot slightly more. Those effects aren't team
   quality, so raw share flatters teams that trail a lot.
-- For each score state (trailing 2+, trailing 1, tied, leading 1, leading 2+), venue
-  (home/away), situation and measure, measure p = the share of events the team in that
-  state got, across the league.
+- For each home score state (home trailing 2+, trailing 1, tied, leading 1, leading 2+),
+  situation and measure, p = the home team's share of events in that state, across the
+  league. The away team's share in the mirrored state is 1 − p ("home up 1" and "away down
+  1" are the same moment), so five numbers per situation and measure cover both venues.
 - Each event for counts 0.5 / p; each event against counts 0.5 / (1 − p). An average team
   then has an adjusted share of 0.5 in every state.
-- Five score states × two venues is 10 cells, ~2,000 shot attempts per cell at even
-  strength. Leads of 2+ are pooled because 3+ goal states are too rare to estimate alone.
+- Five states, ~4,000 shot attempts each at even strength. Leads of 2+ are pooled because
+  3+ goal states are too rare to estimate alone.
+- **Neutral sites** (`fct_games.is_neutral_site`, below): no venue effect, so each event
+  counts the average of its home and away weight, which leaves only the score adjustment.
+  Neutral games are left out when estimating p.
 - Weights are pooled over all seasons, regular season and playoffs, in
   `int_score_venue_weights_estimated`. Trade-off: a new game slightly changes every past
   adjusted value. Per-season weights would avoid that but have ~5× fewer events per cell.
 - **Only `ev` and `all`.** On a power play, time spent there itself depends on the score
   (trailing teams draw more penalties), and PP shares are ~85/15 by design, so an
   adjustment is hard to interpret. `pp`/`pk` adjusted columns are null.
+
+**Neutral sites: new column `fct_games.is_neutral_site`.** The PWHL plays Takeover Tour
+games in cities without a team, where one team is listed as home. That team keeps last
+change (a rule), but loses the crowd, travel and familiarity, and the off-ice officials
+aren't its own.
+- **Detection from data we already have:** `stg_pwhl__games.venue_id`. A venue is one of a
+  team's home venues in a season if it hosts at least 3 of that team's home games there. A
+  game at any other venue is neutral. A count, not a "most-used venue" rule, so a team with
+  two home arenas (a bigger one for big games) isn't flagged.
+- **Before building, one query** lists venues per team per season with game counts, checked
+  by hand against the league's Takeover Tour lists. The threshold of 3 is set from that, as a
+  var with the evidence in a comment.
+- Test: a warning on any venue that hosts the same team exactly 1–2 times in a season and
+  also hosts other teams. Those are the cases the rule could get wrong.
+- Used in step 3 (weights above), step 7 (no home-ice term at neutral sites), and step 8
+  (through the pregame rating gap).
 
 Tests:
 - Grain `[game_id, team_id, situation]`, `accepted_values` on `situation`.
@@ -348,11 +368,30 @@ Plain modules, unit-tested, like `ml/xg/`:
 | `publish.py` | create/stage/swap SQL for the three tables, as `ml/xg/publish.py` |
 | `__main__.py` | `python -m ml.forecast setup|run|backfill --target dev|prod`; the only warehouse access |
 
-**No MLflow, no registry.** Elo and the win-probability model have a handful of parameters.
-They live as constants in `elo.py` / `win_probability.py`, chosen in the evaluation notebook,
-reviewed in a PR. Every run recomputes from scratch from those constants (≈400 games, seconds
-of compute). That gives the same guarantee as xG's registered model: published numbers only
-change when reviewed code changes.
+**Parameters: estimated from data at run time, not hard-coded. No model registry.**
+- **Two kinds of number.**
+  - **Design choices** live in code, reviewed in a PR: the K and carryover grids, λ, the
+    shootout-as-half-a-win rule, the moment spacing.
+  - **Values measured from data** are estimated by the run itself: home ice, OT rate, goal
+    rates, manpower multipliers, β.
+- **Measured values come only from completed seasons.** Every run estimates them from
+  seasons before the one being scored, so they change once a year, when a season ends.
+  That's the same rhythm as xG retraining, but with no manual step. Within a season,
+  published numbers move only because new games were played.
+- **Visible and auditable.** Each run writes the values it used to `ml.forecast_parameters`:
+  name, value, the season it applies to, the seasons it was estimated from, model version.
+  Declared as a dbt source, with tests on plausible ranges (e.g. home ice between −100
+  and +100 Elo points). A daily run has nothing to log in MLflow.
+- **Why no registry, unlike xG:**
+  - There's no fitted object to save: the estimates are a few averages and one small
+    regression.
+  - Recomputing them, and replaying every game, takes seconds and gives the same answer
+    each time.
+  - xG needed the registry because its fitted pipeline is large and sensitive to the
+    scikit-learn version.
+- **MLflow tracking stays for experiments.** `notebooks/forecast_evaluation.py` logs each
+  candidate (Elo grid, win-probability variants) as a run, as the xG notebooks do. The PR
+  that sets a design choice cites the run.
 
 ### Elo
 
@@ -381,8 +420,11 @@ change when reviewed code changes.
 - **Tuning, pre-registered (same discipline as xG):**
   - 2023-24 is warm-up only. Choices are made on 2024-25. 2025-26 (120 games + playoffs)
     is the untouched test.
-  - **Fixed from data, not tuned:** H, from the home win rate in the earlier seasons
-    (H = 400·log10(h / (1 − h))); r, from the OT rate.
+  - **Measured from data each run, not tuned:**
+    - H, from the home win rate in completed seasons, neutral sites excluded
+      (H = 400·log10(h / (1 − h))). It is 0 at neutral sites. Last change probably keeps a
+      little home advantage there, but there are too few neutral games to measure it.
+    - r, from the OT rate.
   - **Tuned, on a small grid:** K ∈ {8, 12, 16, 24, 32} × c ∈ {0.5, 0.67, 0.8, 1.0}, plus one
     yes/no for the MOV multiplier. 20 × 2 = 40 combinations on 90 games is already plenty of
     room to overfit; that's why nothing else is tuned.
@@ -462,13 +504,14 @@ From `ml.team_ratings` (one row per team per game: `rating_before`, `rating_afte
   - It has ~5 parameters, each explainable.
   - Skellam probabilities are a sum of Poisson terms in numpy (scipy is already installed for
     xG): nothing new to install.
-- **Rates:**
-  - League goal rate per second, from earlier seasons.
+- **Rates** (all measured each run from completed seasons and written to
+  `ml.forecast_parameters`; see "Parameters" in step 7):
+  - League goal rate per second.
   - × team strength from pregame Elo: λ_home / λ_away = exp(β · rating gap with home ice). β
-    is fit once by Poisson regression of final scores on the pregame gap (scikit-learn's
+    comes from a Poisson regression of final scores on the pregame gap (scikit-learn's
     `PoissonRegressor`).
   - × manpower multipliers (PP / PK / 4v4 / 3v3) for the penalty time left at that moment,
-    from `int_strength_intervals_derived`, with rates per manpower from earlier seasons.
+    from `int_strength_intervals_derived`.
 - **OT:**
   - Regular season: 3v3 for 5 min. P(home scores first in OT) from the 3v3 rates, and q (as
     in step 7) for the shootout if nobody does.
@@ -542,10 +585,12 @@ These are "ask before" items in CLAUDE.md.
    - `fct_game_win_probabilities` (game × moment)
 2. **New columns on existing marts:**
    - `fct_shots.strength_group`
+   - `fct_games.is_neutral_site` (agreed)
    - `fct_games.home_rating_before`, `away_rating_before`, `home_win_probability`,
      `overtime_probability`
 3. **New Python-written tables** in the existing `ml` schema: `team_ratings`,
-   `season_projections`, `win_probabilities`. Dev first, prod when step 7 ships.
+   `season_projections`, `win_probabilities`, `forecast_parameters`. Dev first, prod when
+   step 7 ships.
 4. **Pipeline change (step 7):**
    - After the xG steps, `python -m ml.forecast run`, then
      `dbt build --select stg_ml__team_ratings+ stg_ml__season_projections+ stg_ml__win_probabilities+`.
