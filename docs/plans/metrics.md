@@ -130,6 +130,7 @@ playoffs). Rows exist for anyone with a shot at a goalie or a goalie game.
 | `goals_above_expected_shrunk` | regressed toward the position group's average; see below |
 | `shrinkage_weight` | `xg / (xg + prior_xg)`: how much of the player's own record the shrunk value keeps, 0 to 1 |
 | `goalie_games`, `shots_faced`, `goals_allowed`, `xg_faced`, `gsax`, `gsax_per_100_shots` | goaltending; null for skaters |
+| `gsax_shrunk`, `goalie_shrinkage_weight` | GSAx regressed toward an average goalie, the same way; null for skaters |
 
 **Shrinkage method: gamma-Poisson empirical Bayes (Bühlmann credibility).**
 - Model: each shooter has a finishing multiplier θ (goals per xG). Goals ~ Poisson(θ · xG).
@@ -155,8 +156,23 @@ playoffs). Rows exist for anyone with a shot at a goalie or a goalie game.
 - **Why not beta-binomial on shooting %:** it ignores shot quality, which is the point of
   the metric. **Why not a mixed model:** same answer, more machinery, a new dependency.
 
-`int_finishing_priors_estimated` holds m and α per position group (one row each), so the
-numbers are visible and tested, and the season and career marts read the same values.
+**Goalies get the same treatment.** Save percentage is at least as noisy as finishing, and
+shrinking shooters but not goalies would be inconsistent.
+- Each goalie has a multiplier φ (goals allowed per xG faced). Goals allowed ~ Poisson(φ ·
+  xG faced).
+- φ̂ = (α_G + goals allowed) / (α_G + xG faced), and `gsax_shrunk` = xG faced · (1 − φ̂).
+- α_G comes from the same method-of-moments formula, over regular-season goalie-seasons.
+  The prior is the average goalie: φ = 1, which rescaled xG makes true for the league each
+  season.
+- Same validation as shooters: does shrunk season-N GSAx per shot predict season N+1 better
+  than raw?
+- Caveat: there are few goalie-seasons (step 5 of the xG plan had 11 goalies with 500+
+  shots), so α_G is estimated less precisely than the shooters' α. The run reports it, and
+  the step 2 validation checks it.
+
+`int_finishing_priors_estimated` holds the prior per group, one row each: F and D (shooting,
+mean m and α) and G (goaltending, α_G). The numbers are visible and tested, and the season
+and career marts read the same values.
 
 Validation (reported here once run): does shrunk season-N finishing predict season-N+1
 goals above expected per shot better than raw? Mean squared error and correlation, raw vs
@@ -347,6 +363,23 @@ outside it. So the true line is somewhere from ~375 to ~430.
 - Before building, one query settles it: hit and faceoff x distributions, and where shots on
   goal stop. The result goes into a new var, `blue_line_offset_units`, with its evidence in a
   comment.
+**Open item: rink (scorekeeper) bias, checked before building.** In the NHL, some arenas'
+off-ice officials record hits, blocks and shots more generously for *both* teams. The
+venue adjustment in step 3 doesn't catch that, and field tilt counts hits, which are the
+most subjective event.
+- **The query:** per venue and season, hits, blocked shots and shots on goal per game,
+  both teams combined. Compare that with the same teams' games elsewhere, so a hard-hitting
+  home team isn't mistaken for a generous scorer.
+- **Decision rule, set in advance:**
+  - Hits: if any regular venue records them at more than 1.5× or less than 0.67× what the
+    same teams record elsewhere, drop hits from field tilt. Shots, blocks and faceoffs
+    remain.
+  - Shots and blocks: if the bias is that large, record it as a known issue with its
+    numbers. It barely moves shares, because both teams in the game are counted by the same
+    scorer, but it does inflate counts and per-2-minute rates.
+  - Per-venue correction factors are the alternative. With ~15 games per venue per season
+    they'd be noisy, so dropping is the default.
+- The result and its numbers go in this doc either way.
 - Blocked-shot coordinates may be the blocker's spot, not the shooter's (xg-audit.md
   dropped this question). Either way they are in the same zone.
 
@@ -599,7 +632,8 @@ These are "ask before" items in CLAUDE.md.
 5. **No new dependencies.** numpy, pandas, scipy and scikit-learn are already in use by
    `ml/xg/`.
 6. **Method choices to confirm:**
-   - shrink finishing toward the position group (not the whole league);
+   - shrink finishing toward the position group (not the whole league), and shrink GSAx
+     toward an average goalie;
    - score adjustment only for `ev`/`all`;
    - GSAx per 100 shots;
    - shootouts as half a win in Elo;
@@ -612,6 +646,8 @@ These are "ask before" items in CLAUDE.md.
   `[forecast]` on the ones fed by `ml/forecast/`. If you meant git tags or GitHub labels,
   say which.
 - **Blue line** in grid units (step 6): settled by a query before that step.
+- **Rink bias** in hits (step 6): settled by a query before that step. It decides whether
+  hits stay in field tilt.
 - **Tiebreakers** past "total wins": verify against the rulebook before step 7.
 
 ## More data from HockeyTech? (suggestions, not in this plan)
