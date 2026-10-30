@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: ml
+    description: >
+      Model output written by `python -m ml.xg` (ml/xg/__main__.py), never by dbt. Lives in
+      the target's own catalog: dev.ml in dev and CI, prod.ml in prod.
+    database: "{{ target.database }}"
+    schema: ml
+    tables:
+      - name: xg_predictions
+        description: >
+          One row per shot per model version: xG from the registered model, out-of-fold
+          for completed seasons (docs/plans/xg-model.md, step 6).

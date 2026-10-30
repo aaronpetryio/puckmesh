@@ -4,4 +4,6 @@
 # The Databricks runtime already ships these, so notebooks/ needs no install there.
 mlflow>=3.0
 pandas>=2.2
-scikit-learn>=1.5
+# Exact: the registered model is trained and scored with the same version. Bumping it
+# means retraining (python -m ml.xg train; docs/plans/xg-model.md, step 6).
+scikit-learn==1.9.1

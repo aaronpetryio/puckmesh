@@ -5,6 +5,7 @@ a scheduled job later with the warehouse connector.
 """
 
 from dataclasses import dataclass
+from datetime import date
 
 import pandas as pd
 
@@ -45,10 +46,12 @@ def shots_query(gold_schema: str, silver_schema: str) -> str:
     # notebook's own widgets (trusted config) and are backtick-quoted.
     return f"""
 select
+    shots.league_id,
     shots.season_id,
     seasons.season_name,
     shots.season_type,
     year(seasons.end_date) as season_year,
+    seasons.end_date as season_end_date,
     shots.game_id,
     games.game_date,
     shots.event_index,
@@ -80,6 +83,22 @@ from {_quoted(gold_schema)}.`dim_players`
 def _quoted(schema: str) -> str:
     """`dev`.`dbt_apetry_gold` from dev.dbt_apetry_gold."""
     return ".".join(f"`{part}`" for part in schema.split("."))
+
+
+def check_season_ended(shots: pd.DataFrame, season_year: int, today: date) -> None:
+    """Raise unless every part of ``season_year`` (regular season, playoffs) has ended.
+
+    Training through a season that's still being played would leave its later shots
+    unscored: the registered model only scores seasons after the one it trained on.
+    """
+    season = shots[shots["season_year"] == season_year]
+    if season.empty:
+        raise ValueError(f"No shots in season year {season_year}.")
+    end = pd.to_datetime(season["season_end_date"]).max().date()
+    if end >= today:
+        raise ValueError(
+            f"Season year {season_year} runs until {end}; train after it ends."
+        )
 
 
 @dataclass(frozen=True)

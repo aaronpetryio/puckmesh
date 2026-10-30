@@ -218,7 +218,7 @@ models:
 
   - name: fct_shots
     description: >
-      One row per recorded shot attempt (on net, goal, blocked) with xG-ready context.
+      One row per recorded shot attempt (on net, goal, blocked) with xG context and xG.
       The API does not record missed shots. Distances are approximate.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
@@ -339,3 +339,23 @@ models:
           skaters_for v skaters_against, from the shooting team's side: '5v5', '5v4' on a
           power play, '4v5' short-handed, '6v5' with its goalie pulled.
         data_tests: [not_null]
+      - name: xg
+        description: >
+          Expected goals: the chance this shot became a goal, from the xG model named by
+          the xg_model_version var, rescaled so each season's total tracks its goals to
+          date. Null for blocked, empty-net and preseason shots, and for new shots until
+          the next scoring run (docs/plans/xg-model.md, steps 6 and 7).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: xg_raw
+        description: >
+          The same model's chance before rescaling, kept so the rescaling can be checked
+          or undone.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1

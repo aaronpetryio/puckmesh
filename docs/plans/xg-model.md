@@ -1,6 +1,6 @@
 # Plan: xG model for the PWHL (shots on goal only)
 
-Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks). Next: step 6. See [Decisions](#decisions).
+Status: steps 1–5 done (audit, strength state, baselines, model v1, sanity checks); steps 6–7 (publish, daily scoring) built, rollout pending. See [Decisions](#decisions).
 
 ## Prior PWHL xG work
 
@@ -242,6 +242,29 @@ Already known:
 - Predictions go in their own table keyed on `game_id, event_index`, with `model_version`. Declare it as a dbt source, and build player xG, team xG, and GSAx marts on it in dbt.
 - Track runs in MLflow, which is included in Databricks Free Edition.
 
+**Built (steps 6 and 7 together):** `fct_shots` reading predictions that don't exist in prod would break the scheduled build, so both ship in one PR.
+- **Training is separate from scoring.** Training is reviewed, and its output is a registered model. The daily job only loads that model; it never refits. So every published value traces to one model, and a new scikit-learn release or a data correction can't change published xG silently. scikit-learn is pinned exactly in `requirements-ml.txt`, so training and scoring use the same version. A bump means retraining.
+- **`python -m ml.xg train --target dev|prod --through-season 2026`** (`ml/xg/__main__.py`), by hand once a season ends:
+  1. Backfill: every completed season gets xG from v1.1 fit on the other completed seasons, then rescaled. This is the setup step 5 checked. Rows go to `<catalog>.ml.xg_predictions`.
+  2. Register: v1.1 fit on all completed seasons is logged to MLflow and registered as `<catalog>.ml.xg_model`. Its tags are `model_version` and `through_season`, and the alias `champion` moves to it after the backfill is written.
+  - Prod training runs only in the manual `train.yml` workflow, in the same pinned environment as scoring.
+- **`python -m ml.xg score --target dev|prod`**, daily in `pipeline.yml` after `dbt build`: it scores every season after the model's `through_season` (the current one), rescales on goals to date, and replaces those rows. Off-season it does nothing. Before the first training run it warns and exits cleanly. `dbt build --select stg_ml__xg_predictions+` then refreshes `fct_shots`.
+- **The table:** `<catalog>.ml.xg_predictions` has one row per shot per model version. Columns: `league_id, game_id, event_index, season_year, model_version, xg_raw, xg, scored_at`. Writes go to a staging table, then one `insert ... replace where` swaps them in. `python -m ml.xg setup` creates the table if it's missing; the pipeline and CI run it before dbt.
+- **dbt:** source `ml.xg_predictions` in the target's catalog. `stg_ml__xg_predictions` keeps the `xg_model_version` var's rows, and `fct_shots` gains `xg` and `xg_raw` (left join). Blocked, empty-net and preseason shots stay null.
+- **Retraining:** once a season ends, run `train.yml` with that season. Past seasons' published xG changes then, once a year. When the model itself changes, bump `MODEL_VERSION` and the dbt var together.
+- **Dev rollout:**
+  - `train --through-season 2026` registered `dev.ml.xg_model` version 1 in Unity Catalog, so the registry works on Free Edition. Its MLflow run is `554b0f322cf9434ab528e37e3baf7b92`.
+  - It wrote 17,940 predictions. The totals match step 5's v1.1 check exactly:
+
+    | Season | Shots | Goals | xG raw | xG rescaled |
+    |---|---|---|---|---|
+    | 2023-24 | 4,896 | 359 | 384.2 | 372.5 |
+    | 2024-25 | 5,646 | 474 | 415.3 | 453.6 |
+    | 2025-26 | 7,398 | 561 | 615.6 | 559.7 |
+
+  - `score` loaded the model and found nothing after 2026, as expected in the off-season.
+  - A full dev `dbt build` passed with the two known warnings: 37 strength mismatches, the baseline, and one shooter not on a roster.
+
 ### 7. Automate (later)
 
 Add a scoring step to the daily workflow after dbt. This changes the schedule, so it needs separate approval.
@@ -266,10 +289,10 @@ These are "ask before" items in CLAUDE.md.
    - One row per shot per model version, keyed on `game_id, event_index, model_version`.
    - Written by Python to a new `ml` schema (`dev.ml.xg_predictions`, later `prod.ml.xg_predictions`) and declared as a dbt source.
    - Creating the prod schema gets asked about again when we reach that step.
-4. **Daily scoring (decided: yes, after model v1):**
-   - The daily run scores new shots with the saved model, so yesterday's games get xG the next morning.
-   - Order: extract → dbt build → score → dbt build of the xG marts.
-   - Training stays manual: when the model changes, or once a season.
+4. **Daily scoring (decided and built, steps 6 and 7):**
+   - The daily run scores new shots with the registered model, so yesterday's games get xG the next morning. It never refits.
+   - Order: extract → create the predictions table if missing → dbt build → score → dbt build of `stg_ml__xg_predictions+`.
+   - Training stays manual (`train.yml`): when the model changes, or once a season.
 5. **Season rescaling (decided: publish rescaled xG, keep raw):**
    - The site shows rescaled xG, so league totals and GSAx aren't skewed by a shift in the league's goal rate.
    - The predictions table stores the raw model output next to it, so the rescaling can be checked or undone.

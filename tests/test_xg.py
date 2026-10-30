@@ -1,10 +1,12 @@
 """Tests for ml.xg: folds, baselines, models, metrics and evaluation tables."""
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from ml.xg import baselines, data, evaluate, metrics, model
+from ml.xg import baselines, data, evaluate, metrics, model, publish
 
 
 def make_shots(n: int = 600, seed: int = 0) -> pd.DataFrame:
@@ -92,6 +94,7 @@ def test_shots_query_filters_and_uses_schemas():
     assert "not shots.is_empty_net" in sql
     assert "('regular', 'playoffs')" in sql
     assert "`dev`.`gold`.`fct_games`" in sql
+    assert "shots.league_id" in sql
     assert "shots.shooter_player_id" in sql
     assert "shots.goalie_player_id" in sql
 
@@ -261,3 +264,113 @@ def test_rates_by_column():
     assert rates.loc["even", ["shots", "goals"]].tolist() == [4, 2]
     assert rates.loc["advantage", "actual_rate"] == pytest.approx(0.5)
     assert rates.loc["advantage", "xg_per_goal"] == pytest.approx(0.5)
+
+
+def make_publish_shots() -> pd.DataFrame:
+    shots = make_model_shots()
+    days = pd.to_timedelta(shots.index % 60, unit="D")
+    return shots.assign(
+        league_id="pwhl",
+        event_index=shots.index,
+        game_date=pd.to_datetime(shots["season_year"].astype(str) + "-01-01") + days,
+    )
+
+
+def test_backfill_scores_completed_seasons_out_of_fold():
+    shots = make_publish_shots()
+    published = model.backfill(shots, model.V1_FEATURES, through_season=2025)
+    # 2026 is after through_season, so it's left to score_new.
+    assert set(published["season_year"]) == {2024, 2025}
+    assert list(published.columns) == [
+        "league_id",
+        "game_id",
+        "event_index",
+        "season_year",
+        "xg_raw",
+        "xg",
+    ]
+    # 2024 comes from a model fit on 2025 alone, never on 2026.
+    is_2024 = shots["season_year"] == 2024
+    fitted = model.fit_logistic(shots[shots["season_year"] == 2025], model.V1_FEATURES)
+    expected = model.predict(fitted, shots[is_2024])
+    assert published.loc[is_2024[is_2024].index, "xg_raw"].to_numpy() == (
+        pytest.approx(expected)
+    )
+
+
+def test_backfill_needs_two_completed_seasons():
+    with pytest.raises(ValueError, match="two completed seasons"):
+        model.backfill(make_publish_shots(), model.V1_FEATURES, through_season=2024)
+
+
+def test_score_new_scores_only_later_seasons():
+    shots = make_publish_shots()
+    fitted = model.fit_logistic(shots[shots["season_year"] <= 2025], model.V1_FEATURES)
+    published = model.score_new(shots, fitted, through_season=2025)
+    assert set(published["season_year"]) == {2026}
+    assert ((published["xg"] > 0) & (published["xg"] < 1)).all()
+    assert model.score_new(shots, fitted, through_season=2026).empty
+
+
+def test_publish_inserts_in_batches_with_the_version():
+    predictions = pd.DataFrame(
+        {
+            "league_id": "pwhl",
+            "game_id": [1, 1, 2],
+            "event_index": [3, 4, 5],
+            "season_year": 2026,
+            "xg_raw": [0.1, 0.2, 0.3],
+            "xg": [0.11, 0.21, 0.31],
+        }
+    )
+    statements = publish.insert_statements("dev", predictions, "v1.1", batch_size=2)
+    assert len(statements) == 2
+    assert statements[0].startswith(
+        "insert into `dev`.`ml`.`xg_predictions_staging` values"
+    )
+    assert (
+        "('pwhl', 1, 3, 2026, 'v1.1', 0.1, 0.11, current_timestamp())"
+        in (statements[0])
+    )
+    assert statements[1].count("current_timestamp()") == 1
+
+
+def test_publish_rejects_unexpected_values():
+    predictions = pd.DataFrame(
+        {
+            "league_id": ["pwhl'; drop"],
+            "game_id": [1],
+            "event_index": [1],
+            "season_year": [2026],
+            "xg_raw": [0.1],
+            "xg": [0.1],
+        }
+    )
+    with pytest.raises(ValueError, match="league_id"):
+        publish.insert_statements("dev", predictions, "v1.1")
+    with pytest.raises(ValueError, match="model version"):
+        publish.replace_statement("dev", "v1'; drop", [2026])
+
+
+def test_publish_replace_swaps_one_version_and_its_seasons():
+    sql = publish.replace_statement("prod", "v1.1", [2024, 2025])
+    assert "insert into `prod`.`ml`.`xg_predictions`" in sql
+    assert "replace where model_version = 'v1.1' and season_year in (2024, 2025)" in (
+        sql
+    )
+    assert "from `prod`.`ml`.`xg_predictions_staging`" in sql
+
+
+def test_check_season_ended():
+    shots = pd.DataFrame(
+        {
+            "season_year": [2026, 2026],
+            "season_end_date": pd.to_datetime(["2026-03-01", "2026-05-30"]),
+        }
+    )
+    data.check_season_ended(shots, 2026, date(2026, 6, 1))
+    # The playoffs end later than the regular season; that end date counts.
+    with pytest.raises(ValueError, match="runs until 2026-05-30"):
+        data.check_season_ended(shots, 2026, date(2026, 5, 1))
+    with pytest.raises(ValueError, match="No shots"):
+        data.check_season_ended(shots, 2027, date(2026, 6, 1))

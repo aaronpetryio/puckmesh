@@ -36,6 +36,10 @@ FEATURE_STEPS = [
 
 # What forward selection kept (notebooks/xg_model_v1.py, MLflow run f3a40e5b...).
 V1_FEATURES = ["shot_type", "is_rebound", "strength", "is_3v3", "period_group"]
+# Names the published model: these features, fit_logistic's settings, and the
+# scoring scheme in backfill / score_new. Change it when any of those change, and
+# change dbt_project.yml's xg_model_version with it.
+MODEL_VERSION = "v1.1"
 
 
 def add_features(shots: pd.DataFrame) -> pd.DataFrame:
@@ -161,6 +165,33 @@ def out_of_fold(shots: pd.DataFrame, features: list[str]) -> np.ndarray:
     return xg
 
 
+def backfill(
+    shots: pd.DataFrame, features: list[str], through_season: int
+) -> pd.DataFrame:
+    """Published xG for every completed season: out-of-fold, then rescaled.
+
+    Each season up to ``through_season`` is scored by a model fit on the other
+    completed seasons (as notebooks/xg_evaluation.py checked), so no published value
+    comes from a model that saw it. Later seasons are left to ``score_new``.
+    """
+    completed = shots[shots["season_year"] <= through_season]
+    if completed["season_year"].nunique() < 2:
+        raise ValueError("Backfill needs at least two completed seasons.")
+    return _published(completed, out_of_fold(completed, features))
+
+
+def score_new(
+    shots: pd.DataFrame, fitted: Pipeline, through_season: int
+) -> pd.DataFrame:
+    """Published xG for seasons after ``through_season``, from the registered model.
+
+    The model was fit on every season up to ``through_season``, so it never saw
+    these. Rescaling uses each season's goals to date. Returns no rows off-season.
+    """
+    new = shots[shots["season_year"] > through_season]
+    return _published(new, predict(fitted, new) if len(new) else np.empty(0))
+
+
 def forward_select(
     folds: list[Fold], candidates: list[str]
 ) -> tuple[list[str], pd.DataFrame]:
@@ -209,6 +240,13 @@ def rescale_to_date(
         frame.join(factor.rename("factor"), on=["season_year", "game_date"])["factor"]
     )
     return expit(logit(xg) + shift.to_numpy())
+
+
+def _published(shots: pd.DataFrame, xg_raw: np.ndarray) -> pd.DataFrame:
+    keys = shots[["league_id", "game_id", "event_index", "season_year"]]
+    if not len(shots):
+        return keys.assign(xg_raw=pd.Series(dtype=float), xg=pd.Series(dtype=float))
+    return keys.assign(xg_raw=xg_raw, xg=rescale_to_date(shots, xg_raw))
 
 
 def _fold_scores(folds: list[Fold], features: list[str]) -> dict[int, dict]:
