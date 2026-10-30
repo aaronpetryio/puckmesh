@@ -34,8 +34,8 @@ FEATURE_STEPS = [
     "period_group",
 ]
 
-# What forward selection kept in step 4 (notebooks/xg_model_v1.py).
-V1_FEATURES = ["shot_type", "is_rebound", "strength"]
+# What forward selection kept (notebooks/xg_model_v1.py, MLflow run f3a40e5b...).
+V1_FEATURES = ["shot_type", "is_rebound", "strength", "is_3v3", "period_group"]
 
 
 def add_features(shots: pd.DataFrame) -> pd.DataFrame:
