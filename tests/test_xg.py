@@ -1,5 +1,7 @@
 """Tests for ml.xg: folds, baselines, models, metrics and evaluation tables."""
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -357,3 +359,18 @@ def test_publish_replace_swaps_one_version_and_its_seasons():
         sql
     )
     assert "from `prod`.`ml`.`xg_predictions_staging`" in sql
+
+
+def test_check_season_ended():
+    shots = pd.DataFrame(
+        {
+            "season_year": [2026, 2026],
+            "season_end_date": pd.to_datetime(["2026-03-01", "2026-05-30"]),
+        }
+    )
+    data.check_season_ended(shots, 2026, date(2026, 6, 1))
+    # The playoffs end later than the regular season; that end date counts.
+    with pytest.raises(ValueError, match="runs until 2026-05-30"):
+        data.check_season_ended(shots, 2026, date(2026, 5, 1))
+    with pytest.raises(ValueError, match="No shots"):
+        data.check_season_ended(shots, 2027, date(2026, 6, 1))

@@ -66,8 +66,8 @@ select
     xg_predictions.xg_raw
 from shots
 inner join seasons on shots.season_id = seasons.season_id
--- Left: blocked, empty-net and preseason shots aren't scored, and new shots wait for
--- the next scoring run.
+-- Left: blocked, empty-net and preseason shots aren't scored, and new shots in the
+-- current season wait for the next scoring run.
 left join xg_predictions
     on shots.game_id = xg_predictions.game_id
     and shots.event_index = xg_predictions.event_index

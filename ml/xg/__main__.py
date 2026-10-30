@@ -17,6 +17,7 @@ steps 6 and 7.
 
 import argparse
 import os
+from datetime import date
 
 import mlflow
 import mlflow.sklearn
@@ -50,6 +51,20 @@ def _use_databricks_mlflow() -> None:
     # registered in Unity Catalog, next to the predictions table.
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
+
+
+def _has_alias(client: MlflowClient, name: str) -> bool:
+    """Whether the model is registered with the alias.
+
+    Other errors (auth, network) propagate, so a broken connection fails the run
+    instead of quietly skipping scoring.
+    """
+    try:
+        return ALIAS in client.get_registered_model(name).aliases
+    except MlflowException as error:
+        if error.error_code == "RESOURCE_DOES_NOT_EXIST":
+            return False
+        raise
 
 
 def _read_shots(cur: Cursor, gold: str, silver: str) -> pd.DataFrame:
@@ -93,6 +108,9 @@ def cmd_train(cur: Cursor, target: str, through_season: int) -> None:
     catalog, gold, silver = _schemas(target)
     cmd_setup(cur, catalog)
     shots = _read_shots(cur, gold, silver)
+    # score_new never scores this season again, so a shot recorded after training
+    # would stay without xG until the next training run.
+    data.check_season_ended(shots, through_season, date.today())
     completed = shots[shots["season_year"] <= through_season]
     predictions = model.backfill(shots, model.V1_FEATURES, through_season)
 
@@ -143,13 +161,13 @@ def cmd_score(cur: Cursor, target: str) -> None:
     cmd_setup(cur, catalog)
     _use_databricks_mlflow()
     name = _registered_name(catalog)
-    try:
-        registered = MlflowClient().get_model_version_by_alias(name, ALIAS)
-    except MlflowException:
+    client = MlflowClient()
+    if not _has_alias(client, name):
         # Until the first training run; not a failure of the daily pipeline.
         message = f"No {name}@{ALIAS} yet; run python -m ml.xg train. Nothing scored."
         print(f"::warning::{message}" if os.environ.get("GITHUB_ACTIONS") else message)
         return
+    registered = client.get_model_version_by_alias(name, ALIAS)
     through_season = int(registered.tags["through_season"])
     model_version = registered.tags["model_version"]
     fitted = mlflow.sklearn.load_model(f"models:/{name}@{ALIAS}")
