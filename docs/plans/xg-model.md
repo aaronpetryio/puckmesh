@@ -252,6 +252,18 @@ Already known:
 - **The table:** `<catalog>.ml.xg_predictions` has one row per shot per model version. Columns: `league_id, game_id, event_index, season_year, model_version, xg_raw, xg, scored_at`. Writes go to a staging table, then one `insert ... replace where` swaps them in. `python -m ml.xg setup` creates the table if it's missing; the pipeline and CI run it before dbt.
 - **dbt:** source `ml.xg_predictions` in the target's catalog. `stg_ml__xg_predictions` keeps the `xg_model_version` var's rows, and `fct_shots` gains `xg` and `xg_raw` (left join). Blocked, empty-net and preseason shots stay null.
 - **Retraining:** once a season ends, run `train.yml` with that season. Past seasons' published xG changes then, once a year. When the model itself changes, bump `MODEL_VERSION` and the dbt var together.
+- **Dev rollout:**
+  - `train --through-season 2026` registered `dev.ml.xg_model` version 1 in Unity Catalog, so the registry works on Free Edition. Its MLflow run is `554b0f322cf9434ab528e37e3baf7b92`.
+  - It wrote 17,940 predictions. The totals match step 5's v1.1 check exactly:
+
+    | Season | Shots | Goals | xG raw | xG rescaled |
+    |---|---|---|---|---|
+    | 2023-24 | 4,896 | 359 | 384.2 | 372.5 |
+    | 2024-25 | 5,646 | 474 | 415.3 | 453.6 |
+    | 2025-26 | 7,398 | 561 | 615.6 | 559.7 |
+
+  - `score` loaded the model and found nothing after 2026, as expected in the off-season.
+  - A full dev `dbt build` passed with the two known warnings: 37 strength mismatches, the baseline, and one shooter not on a roster.
 
 ### 7. Automate (later)
 
