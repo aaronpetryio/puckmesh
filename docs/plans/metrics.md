@@ -180,7 +180,7 @@ shrunk vs zero, for shooters with shots in consecutive seasons. A SQL query in t
 in the SQL editor. Shrinkage should win clearly; if raw wins, α is wrong.
 
 Tests: grain on both marts; `assert_player_seasons_sum_to_careers.sql` (goals, xG, GSAx);
-`assert_player_season_goals_match_shots.sql`; `shrinkage_weight` in [0, 1]; prior α > 0.
+`assert_player_season_goals_match_shots.sql`; `shrinkage_weight` and `goalie_shrinkage_weight` in [0, 1]; every prior α > 0.
 A dbt unit test for the shrinkage formula on hand-worked rows.
 
 ## Step 3: Team shot share, xG share, quality-chance share
