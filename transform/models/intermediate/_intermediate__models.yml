@@ -86,11 +86,11 @@ models:
 
   - name: int_game_venues_classified
     description: >
-      One row per game, with whether it was played at a neutral site: a venue where the home
-      team hosts fewer than neutral_site_min_home_games (3, in dbt_project.yml) games that
-      season year, such as the league's Takeover Tour games. A season year is the year the
-      season ends, covering preseason, regular season and playoffs. fct_games and the
-      score-and-venue weights both read this, so the rule lives in one place.
+      One row per game, with whether it was played at a neutral site: a venue where at least
+      neutral_site_min_home_teams (2, in dbt_project.yml) teams play regular-season or
+      playoff home games that season year, such as the league's Takeover Tour stops. A
+      season year is the year the season ends. fct_games and the score-and-venue weights
+      both read this, so the rule lives in one place.
     config:
       tags: [metrics]
     columns:
@@ -99,8 +99,10 @@ models:
       - name: season_year
         description: The year the season ends. A null would lump games across seasons.
         data_tests: [not_null]
-      - name: home_games_at_venue
-        description: Games the home team hosts at this venue in the season year.
+      - name: home_teams_at_venue
+        description: >
+          Teams with regular-season or playoff home games at this venue in the season year.
+          0 when the venue is unknown or hosts only preseason games.
       - name: is_neutral_site
         data_tests: [not_null]
 

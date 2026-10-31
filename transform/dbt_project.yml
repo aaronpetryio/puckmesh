@@ -33,12 +33,13 @@ vars:
   # A shot this soon after the same team's previous unblocked shot counts as a rebound.
   rebound_window_seconds: 3
 
-  # A venue is one of a team's home arenas in a season year if the team hosts at least this
-  # many games there; a game anywhere else is at a neutral site (the league's Takeover Tour
-  # games, one team listed as home). Counting games rather than taking the most-used arena
-  # keeps a second home arena (a bigger one for big games) from being called neutral.
-  # docs/plans/metrics.md, step 3: check against the league's Takeover Tour lists.
-  neutral_site_min_home_games: 3
+  # A game is at a neutral site (the league's Takeover Tour, one team listed as home) when
+  # at least this many teams play regular-season or playoff home games at its venue that
+  # season year. A team's second arena in its own city (a bigger one for big games) hosts
+  # only that team, so stays home; the cost is that a one-off Takeover game hosting a single
+  # team counts as home. Checked against 2024-2027 venues (docs/plans/metrics.md, step 3);
+  # "to be announced" Takeover arenas share one venue ID, which this treats as neutral.
+  neutral_site_min_home_teams: 2
 
   # Score states for the score-and-venue adjustment: leads beyond this are pooled, since 3+
   # goal states are too rare to estimate alone (docs/plans/metrics.md, step 3).

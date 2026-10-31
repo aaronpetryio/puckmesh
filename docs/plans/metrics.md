@@ -352,23 +352,28 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
 games in cities without a team, where one team is listed as home. That team keeps last
 change (a rule), but loses the crowd, travel and familiarity, and the off-ice officials
 aren't its own.
-- **Detection from data we already have:** `stg_pwhl__games.venue_id`. A venue is one of a
-  team's home venues if it hosts at least `neutral_site_min_home_games` (3) of that team's
-  home games in the season year. A game at any other venue is neutral. A count, not a
-  "most-used venue" rule, so a team with two home arenas (a bigger one for big games) isn't
-  flagged.
-  - The season year (the year the season ends) covers preseason, regular season and
-    playoffs, so a team's two or three playoff home games are judged against its usual
-    arenas, not counted as neutral.
+- **Detection from data we already have:** `stg_pwhl__games.venue_id`. A game is neutral when
+  at least `neutral_site_min_home_teams` (2) teams play regular-season or playoff home
+  games at its venue that season year.
+  - **Why this rule, not the first one.** The first version called a venue neutral when it
+    hosted fewer than 3 of the home team's games. CI warned on 35 venues, and the list
+    (2024–2027) showed why:
+    - Toronto, Montréal and Vancouver each play a game or two a year at a second arena in
+      their own city (venues 13, 15, 19 and 27). Those are home games, and the old rule
+      called them neutral.
+    - Real Takeover Tour stops usually host several teams in a season (venues 9, 23, 32
+      and 33 in 2026).
+    - The league's "to be announced" Takeover arenas share one venue ID (10), with two
+      games each for eight teams in 2026-27.
+  - **Known gap:** a one-off Takeover game that hosts a single team counts as home. That's
+    roughly one game per team per season, and the venue part of the adjustment is small,
+    so it's the better mistake to make than calling second arenas neutral.
+  - Only regular-season and playoff games decide which venues are shared, so preseason
+    games at practice rinks and college arenas don't count.
 - **Built as** `int_game_venues_classified`: one row per game. `fct_games` and the
   score-and-venue weights both read it, so the rule lives in one place.
-- **Check by hand once built:** list the neutral games per season against the league's
-  Takeover Tour lists; adjust the var if they disagree. The query is just
-  `select * from fct_games where is_neutral_site`.
-- Test (`assert_neutral_sites_are_unambiguous`, a warning): a neutral venue that only one
-  team plays "home" games at in a season year. That's the case the rule could get wrong:
-  it might be the team's occasional second arena rather than a Takeover Tour stop, which
-  usually hosts several teams.
+- **Upgrade if precision matters later:** stage the schedule's venue name, if the raw JSON
+  has one, or keep a small seed of Takeover Tour venues.
 - Used in step 3 (weights above), step 7 (no home-ice term at neutral sites), and step 8
   (through the pregame rating gap).
 

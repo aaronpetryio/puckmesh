@@ -150,10 +150,11 @@ models:
         description: The league's venue ID, from the schedule. Null when not listed.
       - name: is_neutral_site
         description: >
-          Played away from the home team's usual arenas: a venue where it hosts fewer than
-          neutral_site_min_home_games (3, in dbt_project.yml) games that season year, such as
-          the league's Takeover Tour games. The listed home team keeps last change, but the
-          crowd isn't its own, so venue effects are left out there (docs/plans/metrics.md,
+          Played at a venue shared by at least neutral_site_min_home_teams (2, in
+          dbt_project.yml) teams' home games that season year: the league's Takeover Tour
+          stops, including its to-be-announced arenas. The listed home team keeps last
+          change, but the crowd isn't its own, so venue effects are left out there. A
+          one-off Takeover game hosting a single team counts as home (docs/plans/metrics.md,
           step 3).
         data_tests: [not_null]
       - name: is_final
