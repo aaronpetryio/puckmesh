@@ -146,6 +146,16 @@ models:
         description: Scheduled start, from the schedule's ISO 8601 time.
       - name: attendance
         description: Null when not reported.
+      - name: venue_id
+        description: The league's venue ID, from the schedule. Null when not listed.
+      - name: is_neutral_site
+        description: >
+          Played away from the home team's usual arenas: a venue where it hosts fewer than
+          neutral_site_min_home_games (3, in dbt_project.yml) games that season year, such as
+          the league's Takeover Tour games. The listed home team keeps last change, but the
+          crowd isn't its own, so venue effects are left out there (docs/plans/metrics.md,
+          step 3).
+        data_tests: [not_null]
       - name: is_final
         description: The game has been played and its result is final.
       - name: home_team_id
@@ -339,6 +349,17 @@ models:
           skaters_for v skaters_against, from the shooting team's side: '5v5', '5v4' on a
           power play, '4v5' short-handed, '6v5' with its goalie pulled.
         data_tests: [not_null]
+      - name: strength_group
+        description: >
+          From the shooting team's side: en when either net is empty (a goalie pulled), else
+          by skaters from penalties alone: ev equal, pp more (power play), pk fewer (penalty
+          kill). Unlike strength_state, a pulled goalie doesn't count as a skater here, so a
+          team on the penalty kill that pulls its goalie is en, not 5v5.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ev, pp, pk, en]
       - name: xg
         description: >
           Expected goals: the chance this shot became a goal, from the xG model named by
@@ -600,6 +621,294 @@ models:
         description: "{{ doc('gsax_shrunk') }}"
       - name: goalie_shrinkage_weight
         description: "{{ doc('goalie_shrinkage_weight') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: fct_team_game_situations
+    description: >
+      One row per team per game per situation (all, ev, pp, pk), regular season and
+      playoffs: shot, xG and quality-chance counts for and against, shares, and
+      score-and-venue adjusted versions (docs/plans/metrics.md, step 3). Situations are from
+      the row's team's side, so a team's pp row mirrors its opponent's pk row. Don't sum
+      across situations: all includes empty-net time that ev, pp and pk leave out.
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, team_id, situation]
+    columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
+      - name: game_id
+        description: "{{ doc('game_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_games')
+                field: game_id
+      - name: team_id
+        description: "{{ doc('team_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
+      - name: situation
+        description: "{{ doc('situation') }}"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [all, ev, pp, pk]
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+      - name: season_type
+        description: regular or playoffs. Preseason has no xG, so it's left out.
+      - name: game_date
+        description: Date played, as the schedule lists it.
+      - name: opponent_team_id
+        description: The other team in the game.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
+      - name: is_home_team
+        description: This team is the listed home team.
+      - name: is_neutral_site
+        description: Played away from the home team's usual arenas (see fct_games).
+      - name: shots_on_goal_for
+        description: Shots on goal (saves plus goals) by this team.
+      - name: shots_on_goal_against
+        description: Shots on goal by the opponent.
+      - name: shot_attempts_for
+        description: "{{ doc('shot_attempts_team') }}"
+      - name: shot_attempts_against
+        description: The opponent's shot attempts (shots on goal plus blocked).
+      - name: xg_for
+        description: >
+          Sum of xG on this team's shots that have it: no blocked or empty-net shots, and no
+          shots still waiting for the next scoring run.
+      - name: xg_against
+        description: The same, on the opponent's shots.
+      - name: quality_chances_for
+        description: >
+          This team's shot attempts the league flags as quality chances (its own location
+          zone; docs/plans/xg-audit.md, 4a).
+      - name: quality_chances_against
+        description: The same, for the opponent.
+      - name: goals_for
+        description: >
+          This team's goals; in all, empty-net goals too. No penalty-shot or shootout goals.
+      - name: goals_against
+        description: The opponent's goals, counted the same way.
+      - name: shots_on_goal_share
+        description: shots_on_goal_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shot_attempts_share
+        description: shot_attempts_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: xg_share
+        description: xg_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: quality_chance_share
+        description: quality_chances_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shots_on_goal_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shots_on_goal_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shot_attempts_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shot_attempts_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: xg_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: xg_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: quality_chances_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: quality_chances_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shots_on_goal_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shot_attempts_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: xg_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: quality_chance_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: fct_team_season_situations
+    description: >
+      One row per team per season per situation (all, ev, pp, pk): the game rows of
+      fct_team_game_situations summed, with shares recomputed from the summed counts rather
+      than averaged across games. Don't sum across situations.
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_id, season_id, situation]
+    columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
+      - name: team_id
+        description: "{{ doc('team_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
+      - name: situation
+        description: "{{ doc('situation') }}"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [all, ev, pp, pk]
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+        data_tests: [not_null]
+      - name: season_type
+        description: regular or playoffs. Preseason has no xG, so it's left out.
+      - name: games_played
+        description: Games with play-by-play in the season (every team has all four situations).
+      - name: shots_on_goal_for
+        description: Shots on goal (saves plus goals) by this team.
+      - name: shots_on_goal_against
+        description: Shots on goal by the opponent.
+      - name: shot_attempts_for
+        description: "{{ doc('shot_attempts_team') }}"
+      - name: shot_attempts_against
+        description: The opponent's shot attempts (shots on goal plus blocked).
+      - name: xg_for
+        description: >
+          Sum of xG on this team's shots that have it: no blocked or empty-net shots, and no
+          shots still waiting for the next scoring run.
+      - name: xg_against
+        description: The same, on the opponent's shots.
+      - name: quality_chances_for
+        description: >
+          This team's shot attempts the league flags as quality chances (its own location
+          zone; docs/plans/xg-audit.md, 4a).
+      - name: quality_chances_against
+        description: The same, for the opponent.
+      - name: goals_for
+        description: >
+          This team's goals; in all, empty-net goals too. No penalty-shot or shootout goals.
+      - name: goals_against
+        description: The opponent's goals, counted the same way.
+      - name: shots_on_goal_share
+        description: shots_on_goal_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shot_attempts_share
+        description: shot_attempts_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: xg_share
+        description: xg_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: quality_chance_share
+        description: quality_chances_for / (for + against). Null when both are 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shots_on_goal_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shots_on_goal_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shot_attempts_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shot_attempts_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: xg_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: xg_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: quality_chances_for_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: quality_chances_against_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+      - name: shots_on_goal_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: shot_attempts_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: xg_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: quality_chance_share_adjusted
+        description: "{{ doc('score_venue_adjusted') }}"
         data_tests:
           - dbt_utils.accepted_range:
               arguments:

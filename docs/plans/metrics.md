@@ -1,7 +1,7 @@
 # Plan: PWHL metrics on top of xG
 
-Status: plan signed off. Steps 1–2 (GSAx, finishing) built; validation query not yet run.
-Steps 3–8 to come. See [Decisions](#decisions) for
+Status: plan signed off. Steps 1–2 (GSAx, finishing) merged; validation query not yet run.
+Steps 3–5 in progress; 6–8 to come. See [Decisions](#decisions) for
 what needs a yes before each step starts.
 
 Eight metric groups, built in order, each on the ones before it:
@@ -298,9 +298,13 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
   then has an adjusted share of 0.5 in every state.
 - Five states, ~4,000 shot attempts each at even strength. Leads of 2+ are pooled because
   3+ goal states are too rare to estimate alone.
-- **Neutral sites** (`fct_games.is_neutral_site`, below): no venue effect, so each event
-  counts the average of its home and away weight, which leaves only the score adjustment.
-  Neutral games are left out when estimating p.
+- **Neutral sites** (`fct_games.is_neutral_site`, below): no venue effect, so a team's
+  expected share is the average of the home and away shares for its score state, which
+  leaves only the score adjustment. Neutral games are left out when estimating p.
+- **Built as** `int_score_venue_weights_estimated`: one row per situation (`all`, `ev`),
+  shooting team's venue (home, away, neutral) and its own score state, with the expected
+  share and the weight (0.5 / share) per measure. The mart needs one join per situation,
+  and the arithmetic is unit-tested in one place.
 - Weights are pooled over all seasons, regular season and playoffs, in
   `int_score_venue_weights_estimated`. Trade-off: a new game slightly changes every past
   adjusted value. Per-season weights would avoid that but have ~5× fewer events per cell.
@@ -313,14 +317,22 @@ games in cities without a team, where one team is listed as home. That team keep
 change (a rule), but loses the crowd, travel and familiarity, and the off-ice officials
 aren't its own.
 - **Detection from data we already have:** `stg_pwhl__games.venue_id`. A venue is one of a
-  team's home venues in a season if it hosts at least 3 of that team's home games there. A
-  game at any other venue is neutral. A count, not a "most-used venue" rule, so a team with
-  two home arenas (a bigger one for big games) isn't flagged.
-- **Before building, one query** lists venues per team per season with game counts, checked
-  by hand against the league's Takeover Tour lists. The threshold of 3 is set from that, as a
-  var with the evidence in a comment.
-- Test: a warning on any venue that hosts the same team exactly 1–2 times in a season and
-  also hosts other teams. Those are the cases the rule could get wrong.
+  team's home venues if it hosts at least `neutral_site_min_home_games` (3) of that team's
+  home games in the season year. A game at any other venue is neutral. A count, not a
+  "most-used venue" rule, so a team with two home arenas (a bigger one for big games) isn't
+  flagged.
+  - The season year (the year the season ends) covers preseason, regular season and
+    playoffs, so a team's two or three playoff home games are judged against its usual
+    arenas, not counted as neutral.
+- **Built as** `int_game_venues_classified`: one row per game. `fct_games` and the
+  score-and-venue weights both read it, so the rule lives in one place.
+- **Check by hand once built:** list the neutral games per season against the league's
+  Takeover Tour lists; adjust the var if they disagree. The query is just
+  `select * from fct_games where is_neutral_site`.
+- Test (`assert_neutral_sites_are_unambiguous`, a warning): a neutral venue that only one
+  team plays "home" games at in a season year. That's the case the rule could get wrong:
+  it might be the team's occasional second arena rather than a Takeover Tour stop, which
+  usually hosts several teams.
 - Used in step 3 (weights above), step 7 (no home-ice term at neutral sites), and step 8
   (through the pregame rating gap).
 

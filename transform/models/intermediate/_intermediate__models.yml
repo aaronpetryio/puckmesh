@@ -84,6 +84,67 @@ models:
                 min_value: 0
                 max_value: 180
 
+  - name: int_game_venues_classified
+    description: >
+      One row per game, with whether it was played at a neutral site: a venue where the home
+      team hosts fewer than neutral_site_min_home_games (3, in dbt_project.yml) games that
+      season year, such as the league's Takeover Tour games. A season year is the year the
+      season ends, covering preseason, regular season and playoffs. fct_games and the
+      score-and-venue weights both read this, so the rule lives in one place.
+    config:
+      tags: [metrics]
+    columns:
+      - name: game_id
+        data_tests: [unique, not_null]
+      - name: home_games_at_venue
+        description: Games the home team hosts at this venue in the season year.
+      - name: is_neutral_site
+        data_tests: [not_null]
+
+  - name: int_score_venue_weights_estimated
+    description: >
+      One row per situation (all, ev), shooting team's venue (home, away, neutral) and its
+      own score state (-2 to 2, leads of 2+ pooled): the league's expected share of each
+      measure in that state, and the weight (0.5 / expected share) one event counts for in
+      score-and-venue adjusted counts (McCurdy's method; docs/plans/metrics.md, step 3).
+      Estimated on regular-season and playoff games, neutral sites left out; neutral rows
+      average the home and away shares.
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [situation, shooter_venue, score_state]
+    columns:
+      - name: situation
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [all, ev]
+      - name: shooter_venue
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [home, away, neutral]
+      - name: expected_share_shot_attempts
+        description: Shots on goal + blocked. The feed has no missed shots.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: false
+      - name: expected_share_xg
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: false
+      - name: weight_shot_attempts
+        data_tests: [not_null]
+
   - name: int_finishing_priors_estimated
     description: >
       One row per prior group: F and D (shooting: goals per xG) and G (goaltending: goals
@@ -204,8 +265,9 @@ unit_tests:
     description: >
       Skaters per side at each shot, from penalties and goalie pulls. Game 1 is a regular
       season game: a power play, then the goal that ends it; three penalties at once still
-      leave 3 skaters; coincidental minors give 4-on-4; a pulled goalie gives 6v5 until a
-      save shows the goalie back; an overtime penalty turns 3-on-3 into 4v3. Game 2 is a
+      leave 3 skaters; coincidental minors give 4-on-4; a pulled goalie gives 6v5 (strength
+      group en) until a save shows the goalie back; an overtime penalty turns 3-on-3 into
+      4v3. Game 2 is a
       preseason game whose overtime is 3-on-3; game 3 is a playoff game whose overtime is
       5-on-5, so a penalty gives 5v4.
     model: int_shots_enriched
@@ -288,16 +350,26 @@ unit_tests:
           - {game_id: 1, event_index: 45, period: 3, team_id: 10, goalie_in_player_id: null}
     expect:
       rows:
-        - {game_id: 1, event_index: 10, skaters_for: 5, skaters_against: 4, strength_state: 5v4}
-        - {game_id: 1, event_index: 12, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
-        - {game_id: 1, event_index: 20, skaters_for: 3, skaters_against: 5, strength_state: 3v5}
-        - {game_id: 1, event_index: 30, skaters_for: 4, skaters_against: 4, strength_state: 4v4}
-        - {game_id: 1, event_index: 50, skaters_for: 6, skaters_against: 5, strength_state: 6v5}
-        - {game_id: 1, event_index: 52, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
-        - {game_id: 1, event_index: 54, skaters_for: 5, skaters_against: 5, strength_state: 5v5}
-        - {game_id: 1, event_index: 60, skaters_for: 4, skaters_against: 3, strength_state: 4v3}
-        - {game_id: 2, event_index: 10, skaters_for: 3, skaters_against: 3, strength_state: 3v3}
-        - {game_id: 3, event_index: 10, skaters_for: 5, skaters_against: 4, strength_state: 5v4}
+        - {game_id: 1, event_index: 10, skaters_for: 5, skaters_against: 4, strength_state: 5v4,
+           strength_group: pp}
+        - {game_id: 1, event_index: 12, skaters_for: 5, skaters_against: 5, strength_state: 5v5,
+           strength_group: ev}
+        - {game_id: 1, event_index: 20, skaters_for: 3, skaters_against: 5, strength_state: 3v5,
+           strength_group: pk}
+        - {game_id: 1, event_index: 30, skaters_for: 4, skaters_against: 4, strength_state: 4v4,
+           strength_group: ev}
+        - {game_id: 1, event_index: 50, skaters_for: 6, skaters_against: 5, strength_state: 6v5,
+           strength_group: en}
+        - {game_id: 1, event_index: 52, skaters_for: 5, skaters_against: 5, strength_state: 5v5,
+           strength_group: ev}
+        - {game_id: 1, event_index: 54, skaters_for: 5, skaters_against: 5, strength_state: 5v5,
+           strength_group: ev}
+        - {game_id: 1, event_index: 60, skaters_for: 4, skaters_against: 3, strength_state: 4v3,
+           strength_group: pp}
+        - {game_id: 2, event_index: 10, skaters_for: 3, skaters_against: 3, strength_state: 3v3,
+           strength_group: ev}
+        - {game_id: 3, event_index: 10, skaters_for: 5, skaters_against: 4, strength_state: 5v4,
+           strength_group: pp}
 
   - name: int_penalties_timed_ends_and_stacks_penalties
     description: >
@@ -505,3 +577,73 @@ unit_tests:
            prior_xg: null}
         - {prior_group: G, player_seasons: 2, prior_goals_per_xg: 1.0, skill_variance: -0.3,
            prior_xg: null}
+
+  - name: int_score_venue_weights_estimated_mirrors_and_averages
+    description: >
+      Home share of shot attempts: tied 1 of 2 (0.5), home up 1 1 of 4 (0.25), home down 1
+      2 of 4 (0.5). An away team up 1 is the home team down 1, so its expected share is
+      1 - 0.5 = 0.5; a neutral team up 1 averages 0.25 and 0.5. Shots from a neutral-site
+      game and a preseason game are left out. Every shot is on a power play, so there are
+      no ev rows.
+    model: int_score_venue_weights_estimated
+    given:
+      - input: ref('int_shots_enriched')
+        rows:
+          - {game_id: 1, event_index: 1, season_id: 1, is_home_team: true, score_diff: 0,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 2, season_id: 1, is_home_team: false, score_diff: 0,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 3, season_id: 1, is_home_team: true, score_diff: 1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 4, season_id: 1, is_home_team: false, score_diff: -1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 5, season_id: 1, is_home_team: false, score_diff: -1,
+             strength_group: pp, shot_result: blocked, is_quality_chance: false}
+          - {game_id: 1, event_index: 6, season_id: 1, is_home_team: false, score_diff: -1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 7, season_id: 1, is_home_team: true, score_diff: -1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 8, season_id: 1, is_home_team: true, score_diff: -1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 9, season_id: 1, is_home_team: false, score_diff: 1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 1, event_index: 10, season_id: 1, is_home_team: false, score_diff: 1,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          # Left out: a neutral-site game and a preseason game.
+          - {game_id: 2, event_index: 1, season_id: 1, is_home_team: true, score_diff: 0,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 2, event_index: 2, season_id: 1, is_home_team: true, score_diff: 0,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+          - {game_id: 3, event_index: 1, season_id: 2, is_home_team: true, score_diff: 0,
+             strength_group: pp, shot_result: on_net, is_quality_chance: false}
+      - input: ref('stg_ml__xg_predictions')
+        rows: []
+      - input: ref('stg_pwhl__seasons')
+        rows:
+          - {season_id: 1, season_type: regular}
+          - {season_id: 2, season_type: preseason}
+      - input: ref('int_game_venues_classified')
+        rows:
+          - {game_id: 1, is_neutral_site: false}
+          - {game_id: 2, is_neutral_site: true}
+          - {game_id: 3, is_neutral_site: false}
+    expect:
+      rows:
+        - {situation: all, shooter_venue: home, score_state: -1,
+           expected_share_shot_attempts: 0.5, weight_shot_attempts: 1.0}
+        - {situation: all, shooter_venue: home, score_state: 0,
+           expected_share_shot_attempts: 0.5, weight_shot_attempts: 1.0}
+        - {situation: all, shooter_venue: home, score_state: 1,
+           expected_share_shot_attempts: 0.25, weight_shot_attempts: 2.0}
+        - {situation: all, shooter_venue: away, score_state: -1,
+           expected_share_shot_attempts: 0.75, weight_shot_attempts: 0.6666666666666666}
+        - {situation: all, shooter_venue: away, score_state: 0,
+           expected_share_shot_attempts: 0.5, weight_shot_attempts: 1.0}
+        - {situation: all, shooter_venue: away, score_state: 1,
+           expected_share_shot_attempts: 0.5, weight_shot_attempts: 1.0}
+        - {situation: all, shooter_venue: neutral, score_state: -1,
+           expected_share_shot_attempts: 0.625, weight_shot_attempts: 0.8}
+        - {situation: all, shooter_venue: neutral, score_state: 0,
+           expected_share_shot_attempts: 0.5, weight_shot_attempts: 1.0}
+        - {situation: all, shooter_venue: neutral, score_state: 1,
+           expected_share_shot_attempts: 0.375, weight_shot_attempts: 1.3333333333333333}

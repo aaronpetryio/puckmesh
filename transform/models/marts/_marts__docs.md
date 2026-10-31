@@ -108,3 +108,21 @@ average goaltending, from int_finishing_priors_estimated (docs/plans/metrics.md,
 xg_faced / (xg_faced + prior_xg), 0 to 1: how much of the goalie's own record gsax_shrunk
 keeps. 0 when the data shows no goaltending skill spread.
 {% enddocs %}
+
+{% docs situation %}
+all, ev, pp or pk, from this row's team's side: ev both teams have the same number of
+skaters from penalties, pp this team has more (power play), pk fewer (penalty kill). Shots
+with either net empty count only in all, so ev + pp + pk don't add up to all: don't sum
+across situations. A team's pp row mirrors its opponent's pk row.
+{% enddocs %}
+
+{% docs shot_attempts_team %}
+Shots on goal plus blocked shots. Not Corsi: the API doesn't record missed shots.
+{% enddocs %}
+
+{% docs score_venue_adjusted %}
+Score-and-venue adjusted: each event weighted by 0.5 / the league's expected share for the
+shooting team's venue and score state, from int_score_venue_weights_estimated, so an average
+team comes out at 0.5 in every state (docs/plans/metrics.md, step 3). Neutral sites use
+score only. all and ev rows only; null for pp and pk.
+{% enddocs %}

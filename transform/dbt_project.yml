@@ -30,6 +30,13 @@ vars:
   # A shot this soon after the same team's previous unblocked shot counts as a rebound.
   rebound_window_seconds: 3
 
+  # A venue is one of a team's home arenas in a season year if the team hosts at least this
+  # many games there; a game anywhere else is at a neutral site (the league's Takeover Tour
+  # games, one team listed as home). Counting games rather than taking the most-used arena
+  # keeps a second home arena (a bigger one for big games) from being called neutral.
+  # docs/plans/metrics.md, step 3: check against the league's Takeover Tour lists.
+  neutral_site_min_home_games: 3
+
   # The xG model fct_shots publishes. Same value as MODEL_VERSION in ml/xg/model.py;
   # change both together.
   xg_model_version: v1.1
