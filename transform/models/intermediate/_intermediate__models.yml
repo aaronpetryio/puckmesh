@@ -84,6 +84,51 @@ models:
                 min_value: 0
                 max_value: 180
 
+  - name: int_finishing_priors_estimated
+    description: >
+      One row per prior group: F and D (shooting: goals per xG) and G (goaltending: goals
+      allowed per xG faced). The shrinkage prior for fct_player_seasons and
+      fct_player_careers, a gamma-Poisson empirical Bayes estimate from regular-season
+      player-seasons on shots at a goalie with xG (docs/plans/metrics.md, step 2).
+    config:
+      tags: [metrics]
+    columns:
+      - name: prior_group
+        description: F or D (shooters by position that season), or G (goalies).
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [F, D, G]
+      - name: player_seasons
+        description: Player-seasons the estimate comes from.
+      - name: prior_goals_per_xg
+        description: >
+          The group average m: goals / xG for shooters, goals allowed / xG faced for goalies,
+          pooled over all its player-seasons.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: skill_variance
+        description: >
+          tau^2, the spread of players' multipliers on xG beyond Poisson noise. Zero or
+          negative means the data can't tell players apart.
+      - name: prior_xg
+        description: >
+          alpha = m / tau^2: how many expected goals of average finishing (or goaltending)
+          the prior is worth. A player with this much xG of their own keeps half their
+          record. Null when skill_variance is zero or negative: everyone in the group is
+          shrunk fully to the average.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
 unit_tests:
   - name: int_shots_enriched_measures_shots_in_feet
     description: >
@@ -379,3 +424,84 @@ unit_tests:
            end_game_seconds: 2700, ended_by_goal_event_index: null}
         - {penalty_id: 18, start_event_index: 80, start_game_seconds: 2800,
            end_game_seconds: 2920, ended_by_goal_event_index: null}
+
+  - name: int_finishing_priors_estimated_uses_method_of_moments
+    description: >
+      Forwards 1 and 2 both have 2.0 xG, with 4 and 0 goals: m = 1, sum((G - mX)^2) = 8,
+      m * sum(X) = 4, sum(X^2) = 8, so tau^2 = 0.5 and prior_xg = 2. Defenders 3 and 4 score
+      exactly their xG, and so do the goalies, so tau^2 is negative and prior_xg is null.
+      A playoff shot, a blocked shot, an empty-net goal and an unscored goal are left out.
+    model: int_finishing_priors_estimated
+    given:
+      - input: ref('int_shots_enriched')
+        rows:
+          - {league_id: pwhl, game_id: 1, event_index: 1, season_id: 1, shooter_player_id: 1,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 2, season_id: 1, shooter_player_id: 1,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 3, season_id: 1, shooter_player_id: 1,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 4, season_id: 1, shooter_player_id: 1,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 5, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: on_net, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 6, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: on_net, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 7, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: on_net, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 8, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: on_net, is_empty_net: false}
+          - {league_id: pwhl, game_id: 2, event_index: 1, season_id: 1, shooter_player_id: 3,
+             goalie_player_id: 8, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 2, event_index: 2, season_id: 1, shooter_player_id: 3,
+             goalie_player_id: 8, shot_result: on_net, is_empty_net: false}
+          - {league_id: pwhl, game_id: 2, event_index: 3, season_id: 1, shooter_player_id: 4,
+             goalie_player_id: 8, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 2, event_index: 4, season_id: 1, shooter_player_id: 4,
+             goalie_player_id: 8, shot_result: on_net, is_empty_net: false}
+          # Left out: a playoff goal, a blocked shot, an empty-net goal, an unscored goal.
+          - {league_id: pwhl, game_id: 3, event_index: 1, season_id: 2, shooter_player_id: 1,
+             goalie_player_id: 8, shot_result: goal, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 9, season_id: 1, shooter_player_id: 1,
+             goalie_player_id: null, shot_result: blocked, is_empty_net: false}
+          - {league_id: pwhl, game_id: 1, event_index: 10, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: true}
+          - {league_id: pwhl, game_id: 1, event_index: 11, season_id: 1, shooter_player_id: 2,
+             goalie_player_id: 9, shot_result: goal, is_empty_net: false}
+      - input: ref('stg_ml__xg_predictions')
+        rows:
+          - {game_id: 1, event_index: 1, xg: 0.5}
+          - {game_id: 1, event_index: 2, xg: 0.5}
+          - {game_id: 1, event_index: 3, xg: 0.5}
+          - {game_id: 1, event_index: 4, xg: 0.5}
+          - {game_id: 1, event_index: 5, xg: 0.5}
+          - {game_id: 1, event_index: 6, xg: 0.5}
+          - {game_id: 1, event_index: 7, xg: 0.5}
+          - {game_id: 1, event_index: 8, xg: 0.5}
+          - {game_id: 2, event_index: 1, xg: 0.5}
+          - {game_id: 2, event_index: 2, xg: 0.5}
+          - {game_id: 2, event_index: 3, xg: 0.5}
+          - {game_id: 2, event_index: 4, xg: 0.5}
+          - {game_id: 3, event_index: 1, xg: 0.5}
+          - {game_id: 1, event_index: 9, xg: 0.5}
+          - {game_id: 1, event_index: 10, xg: 0.5}
+      - input: ref('stg_pwhl__seasons')
+        rows:
+          - {season_id: 1, season_type: regular}
+          - {season_id: 2, season_type: playoffs}
+      - input: ref('stg_pwhl__roster_players')
+        rows:
+          - {player_id: 1, season_id: 1, team_id: 10, position_group: F}
+          - {player_id: 2, season_id: 1, team_id: 10, position_group: F}
+          - {player_id: 3, season_id: 1, team_id: 20, position_group: D}
+          - {player_id: 4, season_id: 1, team_id: 20, position_group: D}
+    expect:
+      # Goalies: 9 faced 4.0 xG and allowed 4, 8 faced 2.0 and allowed 2, so m = 1,
+      # sum((G - mX)^2) = 0, m * sum(X) = 6, sum(X^2) = 20: tau^2 = -0.3.
+      rows:
+        - {prior_group: F, player_seasons: 2, prior_goals_per_xg: 1.0, skill_variance: 0.5,
+           prior_xg: 2.0}
+        - {prior_group: D, player_seasons: 2, prior_goals_per_xg: 1.0, skill_variance: -1.0,
+           prior_xg: null}
+        - {prior_group: G, player_seasons: 2, prior_goals_per_xg: 1.0, skill_variance: -0.3,
+           prior_xg: null}
