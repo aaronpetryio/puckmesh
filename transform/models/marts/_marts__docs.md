@@ -62,3 +62,49 @@ Seconds elapsed in the period.
 {% docs game_seconds %}
 Seconds elapsed in the game. Overtime counts from 3600, whatever the overtime length.
 {% enddocs %}
+
+{% docs scored_shots_on_goal %}
+Shots on goal at a goalie that have xG: no empty-net goals, penalty shots or shootout
+attempts, and no shots still waiting for the next xG scoring run.
+{% enddocs %}
+
+{% docs finishing_goals %}
+Goals on those shots. Leaves out empty-net and penalty-shot goals, so it can be lower than
+the player's official goal total.
+{% enddocs %}
+
+{% docs goals_above_expected %}
+goals minus xg: goals scored beyond what an average shooter would score on the same shots.
+Mostly luck over a single season at PWHL sample sizes; see goals_above_expected_shrunk.
+{% enddocs %}
+
+{% docs goals_above_expected_shrunk %}
+goals_above_expected regressed toward the average for the player's position group (F or D):
+the player's record plus prior_xg expected goals of average finishing, from
+int_finishing_priors_estimated (docs/plans/metrics.md, step 2). Null for goalies.
+{% enddocs %}
+
+{% docs shrinkage_weight %}
+xg / (xg + prior_xg), 0 to 1: how much of the player's own record the shrunk value keeps.
+0 when the data shows no finishing skill spread in the group. Null for goalies.
+{% enddocs %}
+
+{% docs goalie_games %}
+Games played in net (started, came in, or faced a shot), from fct_goalie_games. Null for
+players who never played in net.
+{% enddocs %}
+
+{% docs gsax %}
+Goals saved above expected: xg_faced minus goals_allowed. Positive means fewer goals allowed
+than an average goalie would on the same shots. Null for players who never played in net.
+{% enddocs %}
+
+{% docs gsax_shrunk %}
+gsax regressed toward an average goalie: the goalie's record plus prior_xg expected goals of
+average goaltending, from int_finishing_priors_estimated (docs/plans/metrics.md, step 2).
+{% enddocs %}
+
+{% docs goalie_shrinkage_weight %}
+xg_faced / (xg_faced + prior_xg), 0 to 1: how much of the goalie's own record gsax_shrunk
+keeps. 0 when the data shows no goaltending skill spread.
+{% enddocs %}

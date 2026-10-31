@@ -443,3 +443,223 @@ models:
         description: >
           GSAx per 100 shots faced. Per 100 rather than per shot only so the numbers are
           readable (per shot they are around 0.01). Null with no shots faced.
+
+  - name: fct_player_seasons
+    description: >
+      One row per player per season (regular season and playoffs) with a shot at a goalie
+      or a game in net: finishing (goals minus xG, raw and shrunk) and goaltending (GSAx,
+      raw and shrunk). Shooting counts are 0 for goalies who never shot; goaltending columns
+      are null for skaters (docs/plans/metrics.md, steps 1 and 2).
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, season_id]
+    columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
+      - name: player_id
+        description: "{{ doc('player_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_players')
+                field: player_id
+              config:
+                severity: warn
+      - name: season_id
+        description: "{{ doc('season_id') }}"
+        data_tests: [not_null]
+      - name: season_type
+        description: regular or playoffs. Preseason has no xG, so it's left out.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [regular, playoffs]
+      - name: position_group
+        description: >
+          F, D or G, from that season's roster (latest position if not on one). Decides the
+          shrinkage prior.
+      - name: shots_on_goal
+        description: "{{ doc('scored_shots_on_goal') }}"
+        data_tests: [not_null]
+      - name: goals
+        description: "{{ doc('finishing_goals') }}"
+        data_tests: [not_null]
+      - name: xg
+        description: Sum of xG on those shots.
+        data_tests: [not_null]
+      - name: goals_above_expected
+        description: "{{ doc('goals_above_expected') }}"
+      - name: goals_above_expected_shrunk
+        description: "{{ doc('goals_above_expected_shrunk') }}"
+      - name: shrinkage_weight
+        description: "{{ doc('shrinkage_weight') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: goalie_games
+        description: "{{ doc('goalie_games') }}"
+      - name: shots_faced
+        description: "{{ doc('scored_shots_on_goal') }} Null for players who never played in net."
+      - name: goals_allowed
+        description: Goals among the shots faced.
+      - name: xg_faced
+        description: Sum of xG on the shots faced.
+      - name: gsax
+        description: "{{ doc('gsax') }}"
+      - name: gsax_per_100_shots
+        description: GSAx per 100 shots faced. Null with no shots faced.
+      - name: gsax_shrunk
+        description: "{{ doc('gsax_shrunk') }}"
+      - name: goalie_shrinkage_weight
+        description: "{{ doc('goalie_shrinkage_weight') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: fct_player_careers
+    description: >
+      One row per player per season type: career regular season and career playoffs. The
+      season rows of fct_player_seasons summed, with shrinkage redone on the career totals
+      (shrunk values can't be summed across seasons).
+    config:
+      tags: [metrics]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, season_type]
+    columns:
+      - name: league_id
+        description: "{{ doc('league_id') }}"
+      - name: player_id
+        description: "{{ doc('player_id') }}"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_players')
+                field: player_id
+              config:
+                severity: warn
+      - name: season_type
+        description: regular or playoffs.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [regular, playoffs]
+      - name: position_group
+        description: F, D or G, from the player's most recent season.
+      - name: seasons_played
+        description: Seasons of this type with a shot at a goalie or a game in net.
+      - name: shots_on_goal
+        description: "{{ doc('scored_shots_on_goal') }}"
+        data_tests: [not_null]
+      - name: goals
+        description: "{{ doc('finishing_goals') }}"
+        data_tests: [not_null]
+      - name: xg
+        description: Sum of xG on those shots.
+        data_tests: [not_null]
+      - name: goals_above_expected
+        description: "{{ doc('goals_above_expected') }}"
+      - name: goals_above_expected_shrunk
+        description: "{{ doc('goals_above_expected_shrunk') }}"
+      - name: shrinkage_weight
+        description: "{{ doc('shrinkage_weight') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: goalie_games
+        description: "{{ doc('goalie_games') }}"
+      - name: shots_faced
+        description: "{{ doc('scored_shots_on_goal') }} Null for players who never played in net."
+      - name: goals_allowed
+        description: Goals among the shots faced.
+      - name: xg_faced
+        description: Sum of xG on the shots faced.
+      - name: gsax
+        description: "{{ doc('gsax') }}"
+      - name: gsax_per_100_shots
+        description: GSAx per 100 shots faced. Null with no shots faced.
+      - name: gsax_shrunk
+        description: "{{ doc('gsax_shrunk') }}"
+      - name: goalie_shrinkage_weight
+        description: "{{ doc('goalie_shrinkage_weight') }}"
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+unit_tests:
+  - name: fct_player_seasons_shrinks_toward_the_prior
+    description: >
+      Forward 1: 4 goals on 2.0 xG, prior m = 1 and prior_xg = 2, so the estimate is
+      (2 + 4) / (2 + 2) = 1.5, shrunk +1.0 against raw +2.0, weight 0.5. Defender 3 isn't
+      on that season's roster, so takes D from dim_players: 0 goals on 1.0 xG, and D has no
+      detectable skill spread (prior_xg null, m = 1.5), so the estimate is m itself: shrunk
+      +0.5, weight 0. Goalie 9: 1 goal allowed on 4.0 xG faced over two games, prior m = 1
+      and prior_xg = 4: (4 + 1) / (4 + 4) = 0.625, gsax_shrunk 1.5 against raw 3.0.
+    model: fct_player_seasons
+    given:
+      - input: ref('fct_shots')
+        rows:
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: true, is_empty_net: false, is_goal: true, xg: 0.5}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: true, is_empty_net: false, is_goal: true, xg: 0.5}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: true, is_empty_net: false, is_goal: true, xg: 0.5}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: true, is_empty_net: false, is_goal: true, xg: 0.5}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 3,
+             is_unblocked: true, is_empty_net: false, is_goal: false, xg: 0.5}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 3,
+             is_unblocked: true, is_empty_net: false, is_goal: false, xg: 0.5}
+          # Left out: blocked, and an empty-net goal.
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: false, is_empty_net: false, is_goal: false, xg: null}
+          - {league_id: pwhl, season_id: 1, season_type: regular, shooter_player_id: 1,
+             is_unblocked: true, is_empty_net: true, is_goal: true, xg: null}
+      - input: ref('fct_goalie_games')
+        rows:
+          - {league_id: pwhl, player_id: 9, season_id: 1, season_type: regular,
+             shots_faced: 6, goals_allowed: 1, xg_faced: 2.5}
+          - {league_id: pwhl, player_id: 9, season_id: 1, season_type: regular,
+             shots_faced: 4, goals_allowed: 0, xg_faced: 1.5}
+      - input: ref('fct_player_team_seasons')
+        rows:
+          - {player_id: 1, season_id: 1, team_id: 10, position_group: F}
+          - {player_id: 9, season_id: 1, team_id: 20, position_group: G}
+      - input: ref('dim_players')
+        rows:
+          - {player_id: 1, position_group: F}
+          - {player_id: 3, position_group: D}
+          - {player_id: 9, position_group: G}
+      - input: ref('int_finishing_priors_estimated')
+        rows:
+          - {prior_group: F, prior_goals_per_xg: 1.0, prior_xg: 2.0}
+          - {prior_group: D, prior_goals_per_xg: 1.5, prior_xg: null}
+          - {prior_group: G, prior_goals_per_xg: 1.0, prior_xg: 4.0}
+    expect:
+      rows:
+        - {player_id: 1, position_group: F, shots_on_goal: 4, goals: 4, xg: 2.0,
+           goals_above_expected: 2.0, goals_above_expected_shrunk: 1.0, shrinkage_weight: 0.5,
+           goalie_games: null, gsax: null, gsax_shrunk: null}
+        - {player_id: 3, position_group: D, shots_on_goal: 2, goals: 0, xg: 1.0,
+           goals_above_expected: -1.0, goals_above_expected_shrunk: 0.5, shrinkage_weight: 0.0,
+           goalie_games: null, gsax: null, gsax_shrunk: null}
+        - {player_id: 9, position_group: G, shots_on_goal: 0, goals: 0, xg: 0.0,
+           goals_above_expected: 0.0, goals_above_expected_shrunk: null, shrinkage_weight: null,
+           goalie_games: 2, shots_faced: 10, goals_allowed: 1, xg_faced: 4.0, gsax: 3.0,
+           gsax_per_100_shots: 30.0, gsax_shrunk: 1.5, goalie_shrinkage_weight: 0.5}

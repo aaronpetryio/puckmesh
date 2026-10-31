@@ -1,6 +1,7 @@
 # Plan: PWHL metrics on top of xG
 
-Status: plan only, waiting for sign-off. Nothing built yet. See [Decisions](#decisions) for
+Status: plan signed off. Steps 1–2 (GSAx, finishing) built; validation query not yet run.
+Steps 3–8 to come. See [Decisions](#decisions) for
 what needs a yes before each step starts.
 
 Eight metric groups, built in order, each on the ones before it:
@@ -162,8 +163,8 @@ shrinking shooters but not goalies would be inconsistent.
   xG faced).
 - φ̂ = (α_G + goals allowed) / (α_G + xG faced), and `gsax_shrunk` = xG faced · (1 − φ̂).
 - α_G comes from the same method-of-moments formula, over regular-season goalie-seasons.
-  The prior is the average goalie: φ = 1, which rescaled xG makes true for the league each
-  season.
+  The prior is the average goalie: m_G = pooled goals allowed / xG faced, which rescaled xG
+  keeps close to 1.
 - Same validation as shooters: does shrunk season-N GSAx per shot predict season N+1 better
   than raw?
 - Caveat: there are few goalie-seasons (step 5 of the xG plan had 11 goalies with 500+
@@ -174,14 +175,89 @@ shrinking shooters but not goalies would be inconsistent.
 mean m and α) and G (goaltending, α_G). The numbers are visible and tested, and the season
 and career marts read the same values.
 
-Validation (reported here once run): does shrunk season-N finishing predict season-N+1
-goals above expected per shot better than raw? Mean squared error and correlation, raw vs
-shrunk vs zero, for shooters with shots in consecutive seasons. A SQL query in this doc, run
-in the SQL editor. Shrinkage should win clearly; if raw wins, α is wrong.
+Validation (reported here once run): does this season's shrunk estimate predict next
+season's goals above expected better than the raw one, or than predicting zero?
+- For each player with regular-season shots (or games in net) in two consecutive regular
+  seasons, the prediction for season N+1 is next season's xG × (season N's multiplier − 1).
+- Lower mean squared error wins. Shrinkage should beat raw clearly; if raw wins, α is wrong.
+- **Caveat:** α and m are estimated on every season, season N+1 included, so this check
+  is slightly optimistic. With three seasons there is no clean way around that.
 
-Tests: grain on both marts; `assert_player_seasons_sum_to_careers.sql` (goals, xG, GSAx);
-`assert_player_season_goals_match_shots.sql`; `shrinkage_weight` and `goalie_shrinkage_weight` in [0, 1]; every prior α > 0.
-A dbt unit test for the shrinkage formula on hand-worked rows.
+Run in the SQL editor, with `<gold>` / `<silver>` replaced by your schemas
+(e.g. `dev.dbt_apetry_gold`):
+
+```sql
+with regular_seasons as (
+    select
+        season_id,
+        row_number() over (order by start_date) as season_number
+    from <silver>.stg_pwhl__seasons
+    where season_type = 'regular'
+),
+
+player_seasons as (
+    select
+        player_seasons.*,
+        regular_seasons.season_number
+    from <gold>.fct_player_seasons as player_seasons
+    inner join regular_seasons on player_seasons.season_id = regular_seasons.season_id
+),
+
+pairs as (
+    -- Multipliers on xG: goals per xG for shooters, goals allowed per xG faced for goalies.
+    select
+        'shooters' as kind,
+        this_season.goals / this_season.xg as raw_multiplier,
+        1 + this_season.goals_above_expected_shrunk / this_season.xg as shrunk_multiplier,
+        next_season.xg as next_xg,
+        next_season.goals - next_season.xg as next_above_expected
+    from player_seasons as this_season
+    inner join player_seasons as next_season
+        on this_season.player_id = next_season.player_id
+        and this_season.season_number + 1 = next_season.season_number
+    where
+        this_season.position_group in ('F', 'D')
+        and this_season.xg > 0
+        and next_season.xg > 0
+
+    union all
+
+    select
+        'goalies' as kind,
+        this_season.goals_allowed / this_season.xg_faced as raw_multiplier,
+        1 - this_season.gsax_shrunk / this_season.xg_faced as shrunk_multiplier,
+        next_season.xg_faced as next_xg,
+        next_season.goals_allowed - next_season.xg_faced as next_above_expected
+    from player_seasons as this_season
+    inner join player_seasons as next_season
+        on this_season.player_id = next_season.player_id
+        and this_season.season_number + 1 = next_season.season_number
+    where
+        this_season.xg_faced > 0
+        and next_season.xg_faced > 0
+)
+
+select
+    kind,
+    count(*) as player_pairs,
+    avg(power(next_above_expected, 2)) as mse_predict_zero,
+    avg(power(next_above_expected - next_xg * (raw_multiplier - 1), 2)) as mse_predict_raw,
+    avg(power(next_above_expected - next_xg * (shrunk_multiplier - 1), 2)) as mse_predict_shrunk
+from pairs
+group by kind
+```
+
+For goalies the "above expected" here is goals allowed minus xG faced, i.e. −GSAx. The sign
+doesn't matter for squared error.
+
+Tests:
+- Grain on both marts.
+- `assert_player_seasons_sum_to_careers.sql`: career counts equal the summed seasons.
+- `assert_player_seasons_match_shots.sql`: per season, shooting totals equal `fct_shots`
+  and goaltending totals equal `fct_goalie_games`.
+- `shrinkage_weight` and `goalie_shrinkage_weight` in [0, 1]; every prior α > 0.
+- Unit tests: the method-of-moments estimate (`int_finishing_priors_estimated`) and the
+  shrinkage formula (`fct_player_seasons`), both on hand-worked rows.
 
 ## Step 3: Team shot share, xG share, quality-chance share
 
