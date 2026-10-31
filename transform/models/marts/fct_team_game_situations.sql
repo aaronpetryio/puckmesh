@@ -35,6 +35,15 @@ weights as (
     select * from {{ ref('int_score_venue_weights_estimated') }}
 ),
 
+strength_intervals as (
+    select
+        game_id,
+        duration_seconds,
+        home_skaters,
+        away_skaters
+    from {{ ref('int_strength_intervals_derived') }}
+),
+
 situations as (
     select explode(array('all', 'ev', 'pp', 'pk')) as situation
 ),
@@ -184,6 +193,56 @@ totals as (
     group by game_id, team_id, situation
 ),
 
+team_seconds as (
+    -- Time in each situation from each team's side; all is the whole game.
+    select
+        strength_intervals.game_id,
+        team_games.team_id,
+        case
+            when team_games.is_home_team then strength_intervals.home_skaters
+            else strength_intervals.away_skaters
+        end as skaters_for,
+        case
+            when team_games.is_home_team then strength_intervals.away_skaters
+            else strength_intervals.home_skaters
+        end as skaters_against,
+        strength_intervals.duration_seconds
+    from strength_intervals
+    inner join team_games on strength_intervals.game_id = team_games.game_id
+),
+
+situation_spans as (
+    select
+        game_id,
+        team_id,
+        case
+            when skaters_for = skaters_against then 'ev'
+            when skaters_for > skaters_against then 'pp'
+            else 'pk'
+        end as situation,
+        duration_seconds
+    from team_seconds
+
+    union all
+
+    select
+        game_id,
+        team_id,
+        'all' as situation,
+        duration_seconds
+    from team_seconds
+),
+
+situation_totals as (
+    select
+        game_id,
+        team_id,
+        situation,
+        sum(duration_seconds) as situation_seconds
+    from situation_spans
+    group by game_id, team_id, situation
+),
+
 filled as (
     -- One row per team, game and situation, with zeros where nothing happened (no power
     -- play in the game, say). Adjusted counts exist only for all and ev.
@@ -198,6 +257,7 @@ filled as (
         team_games.opponent_team_id,
         team_games.is_home_team,
         team_games.is_neutral_site,
+        coalesce(situation_totals.situation_seconds, 0) as situation_seconds,
 
         coalesce(totals.shots_on_goal_for, 0) as shots_on_goal_for,
         coalesce(totals.shots_on_goal_against, 0) as shots_on_goal_against,
@@ -225,6 +285,10 @@ filled as (
         on team_games.game_id = totals.game_id
         and team_games.team_id = totals.team_id
         and situations.situation = totals.situation
+    left join situation_totals
+        on team_games.game_id = situation_totals.game_id
+        and team_games.team_id = situation_totals.team_id
+        and situations.situation = situation_totals.situation
 ),
 
 adjusted as (
@@ -267,6 +331,7 @@ select
     opponent_team_id,
     is_home_team,
     is_neutral_site,
+    situation_seconds,
 
     shots_on_goal_for,
     shots_on_goal_against,
@@ -305,5 +370,11 @@ select
     xg_for_adjusted / nullif(xg_for_adjusted + xg_against_adjusted, 0) as xg_share_adjusted,
     quality_chances_for_adjusted
     / nullif(quality_chances_for_adjusted + quality_chances_against_adjusted, 0)
-        as quality_chance_share_adjusted
+        as quality_chance_share_adjusted,
+
+    -- Per 2 minutes, the length of a minor: on the pp row, xG per full power play.
+    120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
+    120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
+    120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
+    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min
 from adjusted

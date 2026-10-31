@@ -12,6 +12,7 @@ totals as (
         situation,
         season_type,
         count(*) as games_played,
+        sum(situation_seconds) as situation_seconds,
         sum(shots_on_goal_for) as shots_on_goal_for,
         sum(shots_on_goal_against) as shots_on_goal_against,
         sum(shot_attempts_for) as shot_attempts_for,
@@ -41,6 +42,7 @@ select
     situation,
     season_type,
     games_played,
+    situation_seconds,
 
     shots_on_goal_for,
     shots_on_goal_against,
@@ -79,5 +81,10 @@ select
     xg_for_adjusted / nullif(xg_for_adjusted + xg_against_adjusted, 0) as xg_share_adjusted,
     quality_chances_for_adjusted
     / nullif(quality_chances_for_adjusted + quality_chances_against_adjusted, 0)
-        as quality_chance_share_adjusted
+        as quality_chance_share_adjusted,
+
+    120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
+    120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
+    120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
+    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min
 from totals

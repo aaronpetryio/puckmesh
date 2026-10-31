@@ -683,6 +683,15 @@ models:
         description: This team is the listed home team.
       - name: is_neutral_site
         description: Played away from the home team's usual arenas (see fct_games).
+      - name: situation_seconds
+        description: >
+          Time in the situation, from int_strength_intervals_derived (penalties only, so
+          time with a goalie pulled stays in its manpower group). all is the game's length.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
       - name: shots_on_goal_for
         description: Shots on goal (saves plus goals) by this team.
       - name: shots_on_goal_against
@@ -780,7 +789,18 @@ models:
               arguments:
                 min_value: 0
                 max_value: 1
-
+      - name: goals_for_per_2_min
+        description: >
+          goals_for per 2 minutes in the situation, the length of a minor penalty. On a pp
+          row, goals per full power play. Null when situation_seconds is 0.
+      - name: goals_against_per_2_min
+        description: goals_against per 2 minutes. On a pk row, goals allowed per penalty kill.
+      - name: xg_for_per_2_min
+        description: >
+          xg_for per 2 minutes. On a pp row, power-play xG per full power play; on a pk row,
+          the shorthanded chances generated.
+      - name: xg_against_per_2_min
+        description: xg_against per 2 minutes. On a pk row, xG allowed per penalty kill.
   - name: fct_team_season_situations
     description: >
       One row per team per season per situation (all, ev, pp, pk): the game rows of
@@ -817,6 +837,14 @@ models:
         description: regular or playoffs. Preseason has no xG, so it's left out.
       - name: games_played
         description: Games with play-by-play in the season (every team has all four situations).
+      - name: situation_seconds
+        description: >
+          Time in the situation over the season, summed from the game rows.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
       - name: shots_on_goal_for
         description: Shots on goal (saves plus goals) by this team.
       - name: shots_on_goal_against
@@ -914,7 +942,18 @@ models:
               arguments:
                 min_value: 0
                 max_value: 1
-
+      - name: goals_for_per_2_min
+        description: >
+          goals_for per 2 minutes in the situation, the length of a minor penalty. On a pp
+          row, goals per full power play. Null when situation_seconds is 0.
+      - name: goals_against_per_2_min
+        description: goals_against per 2 minutes. On a pk row, goals allowed per penalty kill.
+      - name: xg_for_per_2_min
+        description: >
+          xg_for per 2 minutes. On a pp row, power-play xG per full power play; on a pk row,
+          the shorthanded chances generated.
+      - name: xg_against_per_2_min
+        description: xg_against per 2 minutes. On a pk row, xG allowed per penalty kill.
 unit_tests:
   - name: fct_goalie_games_credits_shots_and_starters
     description: >

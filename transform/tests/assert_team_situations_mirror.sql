@@ -1,4 +1,5 @@
--- Every count for a team should be its opponent's count against, in the mirrored situation:
+-- Every count for a team should be its opponent's count against, in the mirrored situation,
+-- and both should have spent the same time in it:
 -- all and ev mirror themselves, pp mirrors pk. Adjusted counts too, since a shot's weight
 -- is the same for both teams. A row with no mirror also fails.
 -- Returns the team-game-situations that don't reconcile.
@@ -12,7 +13,8 @@ mirrored as (
         team.team_id,
         team.situation,
         opponent.team_id as opponent_row_team_id,
-        team.shots_on_goal_for = opponent.shots_on_goal_against
+        team.situation_seconds = opponent.situation_seconds
+        and team.shots_on_goal_for = opponent.shots_on_goal_against
         and team.shot_attempts_for = opponent.shot_attempts_against
         and team.quality_chances_for = opponent.quality_chances_against
         and team.goals_for = opponent.goals_against

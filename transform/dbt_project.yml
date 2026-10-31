@@ -26,6 +26,9 @@ vars:
   rink_goal_line_ft: 89      # goal line from center ice (11 ft from the end boards)
 
   regulation_period_seconds: 1200   # 20 minutes; overtime counts from 3 x 1200
+  # PWHL rulebook: regular-season overtime is five minutes of 3-on-3, then a shootout.
+  # Playoff overtime is 20-minute periods until a goal.
+  regular_season_overtime_seconds: 300
 
   # A shot this soon after the same team's previous unblocked shot counts as a rebound.
   rebound_window_seconds: 3
