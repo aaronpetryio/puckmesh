@@ -208,27 +208,46 @@ situation as (
         and flagged.event_index = pull_counts.event_index
 ),
 
-strength as (
-    -- Skaters on the ice for each side (docs/plans/xg-model.md, step 2). In regulation and
-    -- playoff overtime each penalty takes a skater off, never below 3. Other overtime is
-    -- 3-on-3, and a penalty gives the other team an extra skater instead, up to 5. A
-    -- pulled goalie adds a skater.
+manpower as (
+    -- Skaters each side has from penalties alone (docs/plans/xg-model.md, step 2). In
+    -- regulation and playoff overtime each penalty takes a skater off, never below 3. Other
+    -- overtime is 3-on-3, and a penalty gives the other team an extra skater instead, up
+    -- to 5.
     select
         game_id,
         event_index,
+        is_own_net_empty,
+        is_other_net_empty,
         case
             when is_three_on_three_overtime
                 then 3 + least(greatest(other_penalties - own_penalties, 0), 2)
             else 5 - least(own_penalties, 2)
-        end
-        + case when is_own_net_empty then 1 else 0 end as skaters_for,
+        end as penalty_skaters_for,
         case
             when is_three_on_three_overtime
                 then 3 + least(greatest(own_penalties - other_penalties, 0), 2)
             else 5 - least(other_penalties, 2)
-        end
-        + case when is_other_net_empty then 1 else 0 end as skaters_against
+        end as penalty_skaters_against
     from situation
+),
+
+strength as (
+    -- A pulled goalie adds a skater. strength_group ignores pulls on purpose: a team on the
+    -- penalty kill that pulls its goalie is still shorthanded, not at even strength, so
+    -- shots with either net empty get their own group (docs/plans/metrics.md, step 3).
+    select
+        game_id,
+        event_index,
+        penalty_skaters_for + case when is_own_net_empty then 1 else 0 end as skaters_for,
+        penalty_skaters_against + case when is_other_net_empty then 1 else 0 end
+            as skaters_against,
+        case
+            when is_own_net_empty or is_other_net_empty then 'en'
+            when penalty_skaters_for = penalty_skaters_against then 'ev'
+            when penalty_skaters_for > penalty_skaters_against then 'pp'
+            else 'pk'
+        end as strength_group
+    from manpower
 ),
 
 score_state as (
@@ -319,7 +338,8 @@ select
 
     strength.skaters_for,
     strength.skaters_against,
-    concat(strength.skaters_for, 'v', strength.skaters_against) as strength_state
+    concat(strength.skaters_for, 'v', strength.skaters_against) as strength_state,
+    strength.strength_group
 from positioned
 inner join score_state
     on positioned.game_id = score_state.game_id

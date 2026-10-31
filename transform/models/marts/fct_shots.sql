@@ -61,6 +61,7 @@ select
     shots.skaters_for,
     shots.skaters_against,
     shots.strength_state,
+    shots.strength_group,
 
     xg_predictions.xg,
     xg_predictions.xg_raw

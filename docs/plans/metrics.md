@@ -1,7 +1,7 @@
 # Plan: PWHL metrics on top of xG
 
-Status: plan signed off. Steps 1–2 (GSAx, finishing) built; validation query not yet run.
-Steps 3–8 to come. See [Decisions](#decisions) for
+Status: plan signed off. Steps 1–2 (GSAx, finishing) merged; validation query not yet run.
+Steps 3–5 built (PR C), waiting on CI; 6–8 to come. See [Decisions](#decisions) for
 what needs a yes before each step starts.
 
 Eight metric groups, built in order, each on the ones before it:
@@ -147,11 +147,14 @@ playoffs). Rows exist for anyone with a shot at a goalie or a goalie game.
   τ² = (Σ(G − X)² − ΣX) / ΣX², summed over regular-season player-seasons. If that comes out
   ≤ 0, the data can't tell shooters apart and everyone is shrunk fully to the average. One
   `select` in SQL, no new dependency.
-- **Shrink toward the position group (F or D), not the whole league.** Step 5 of the xG plan
-  found defenders beat pooled xG (three in the top 15 by goals above xG), likely point shots
-  through traffic the data can't see. Shrinking a defender toward a forward-dominated league
-  average would pull them too far. m is the group's goals / xG, pooled over all
-  regular-season player-seasons; α is pooled across groups (each group alone is too small).
+- **Shrink toward the position group (F or D), not the whole league.** Forwards and
+  defenders finish differently against pooled xG, so each is shrunk toward its own average.
+  m and α are both estimated per group, over all its regular-season player-seasons.
+  - *Correction, after the first run:* this plan first said defenders *beat* pooled xG,
+    from three defenders in the xG plan's top 15. As a group they score about 8% *below* xG
+    (m = 0.92, below). The top-15 defenders were the lucky ones. Shrinking toward the group
+    still holds, and matters more: shrinking toward the league's 1.04 would overrate every
+    defender.
 - **Careers use the same m and α** on career totals. Under the model, skill is fixed, so the
   same formula applies to a bigger sample. That's why careers are their own mart.
 - **Why not beta-binomial on shooting %:** it ignores shot quality, which is the point of
@@ -250,6 +253,39 @@ group by kind
 For goalies the "above expected" here is goals allowed minus xG faced, i.e. −GSAx. The sign
 doesn't matter for squared error.
 
+**Results** (dev, after PR #21; lower is better):
+
+The priors, from `int_finishing_priors_estimated`:
+
+| Group | Player-seasons | m (goals per xG) | τ² | prior_xg (α) |
+|---|---|---|---|---|
+| F | 294 | 1.040 | 0.0349 | 29.8 |
+| D | 150 | 0.923 | −0.0054 | null: shrunk fully to m |
+| G | 49 | 1.019 | 0.0064 | 160.4 |
+
+Next-season prediction:
+
+| Kind | Pairs | MSE, predict 0 | MSE, raw | MSE, shrunk |
+|---|---|---|---|---|
+| Shooters | 216 | 4.33 | 7.71 | **4.14** |
+| Goalies | 23 | 55.9 | **49.4** | 54.4 |
+
+- **Shooters: shrinkage works.** Copying last season's raw finishing is much worse than
+  predicting zero, because one season is mostly luck. Shrunk is best, about 5% better than
+  zero. Real finishing skill exists among forwards, but it's a weak signal: a forward needs
+  about 30 xG of her own before her record counts as much as the average.
+- **Defenders: no detectable finishing skill.** τ² is negative, so every defender's shrunk
+  value is just the group's −8%. The site should show defenders' raw goals above expected,
+  with that note, rather than a shrunk number that carries no individual information.
+- **Goalies: raw wins, so α_G looks too large, but only 23 pairs.** The method-of-moments
+  estimate weights goalie-seasons by workload already, so backups aren't the cause. A
+  likely one: team defense that xG doesn't see (screens, passes), which persists year to
+  year with the same goalie and makes raw GSAx repeat without it being her skill.
+  - **Decision:** keep the method. Choosing α_G to win this 23-pair check would fit noise.
+  - The site shows raw and shrunk GSAx side by side, noting that goalie shrinkage is
+    uncertain at this sample size.
+  - Re-run this check after 2026-27, which adds a season of pairs.
+
 Tests:
 - Grain on both marts.
 - `assert_player_seasons_sum_to_careers.sql`: career counts equal the summed seasons.
@@ -278,7 +314,7 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
 |---|---|
 | `league_id`, `game_id`, `team_id`, `situation` | keys |
 | `season_id`, `season_type`, `game_date`, `opponent_team_id`, `is_home_team` | |
-| `seconds` | time in the situation (step 4); game length for `all` |
+| `situation_seconds` | time in the situation (step 4); game length for `all`. Not `seconds`, a SQL keyword |
 | `shots_on_goal_for` / `_against` | |
 | `shot_attempts_for` / `_against` | shots on goal + blocked. Not Corsi: no missed shots |
 | `xg_for` / `_against` | |
@@ -298,9 +334,13 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
   then has an adjusted share of 0.5 in every state.
 - Five states, ~4,000 shot attempts each at even strength. Leads of 2+ are pooled because
   3+ goal states are too rare to estimate alone.
-- **Neutral sites** (`fct_games.is_neutral_site`, below): no venue effect, so each event
-  counts the average of its home and away weight, which leaves only the score adjustment.
-  Neutral games are left out when estimating p.
+- **Neutral sites** (`fct_games.is_neutral_site`, below): no venue effect, so a team's
+  expected share is the average of the home and away shares for its score state, which
+  leaves only the score adjustment. Neutral games are left out when estimating p.
+- **Built as** `int_score_venue_weights_estimated`: one row per situation (`all`, `ev`),
+  shooting team's venue (home, away, neutral) and its own score state, with the expected
+  share and the weight (0.5 / share) per measure. The mart needs one join per situation,
+  and the arithmetic is unit-tested in one place.
 - Weights are pooled over all seasons, regular season and playoffs, in
   `int_score_venue_weights_estimated`. Trade-off: a new game slightly changes every past
   adjusted value. Per-season weights would avoid that but have ~5× fewer events per cell.
@@ -312,15 +352,28 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
 games in cities without a team, where one team is listed as home. That team keeps last
 change (a rule), but loses the crowd, travel and familiarity, and the off-ice officials
 aren't its own.
-- **Detection from data we already have:** `stg_pwhl__games.venue_id`. A venue is one of a
-  team's home venues in a season if it hosts at least 3 of that team's home games there. A
-  game at any other venue is neutral. A count, not a "most-used venue" rule, so a team with
-  two home arenas (a bigger one for big games) isn't flagged.
-- **Before building, one query** lists venues per team per season with game counts, checked
-  by hand against the league's Takeover Tour lists. The threshold of 3 is set from that, as a
-  var with the evidence in a comment.
-- Test: a warning on any venue that hosts the same team exactly 1–2 times in a season and
-  also hosts other teams. Those are the cases the rule could get wrong.
+- **Detection from data we already have:** `stg_pwhl__games.venue_id`. A game is neutral when
+  at least `neutral_site_min_home_teams` (2) teams play regular-season or playoff home
+  games at its venue that season year.
+  - **Why this rule, not the first one.** The first version called a venue neutral when it
+    hosted fewer than 3 of the home team's games. CI warned on 35 venues, and the list
+    (2024–2027) showed why:
+    - Toronto, Montréal and Vancouver each play a game or two a year at a second arena in
+      their own city (venues 13, 15, 19 and 27). Those are home games, and the old rule
+      called them neutral.
+    - Real Takeover Tour stops usually host several teams in a season (venues 9, 23, 32
+      and 33 in 2026).
+    - The league's "to be announced" Takeover arenas share one venue ID (10), with two
+      games each for eight teams in 2026-27.
+  - **Known gap:** a one-off Takeover game that hosts a single team counts as home. That's
+    roughly one game per team per season, and the venue part of the adjustment is small,
+    so it's the better mistake to make than calling second arenas neutral.
+  - Only regular-season and playoff games decide which venues are shared, so preseason
+    games at practice rinks and college arenas don't count.
+- **Built as** `int_game_venues_classified`: one row per game. `fct_games` and the
+  score-and-venue weights both read it, so the rule lives in one place.
+- **Upgrade if precision matters later:** stage the schedule's venue name, if the raw JSON
+  has one, or keep a small seed of Takeover Tour venues.
 - Used in step 3 (weights above), step 7 (no home-ice term at neutral sites), and step 8
   (through the pregame rating gap).
 
@@ -358,9 +411,9 @@ ended it), the start of overtime (3-on-3 rules in regular season), and the game'
   (style guide: three or more).
 - Known gap: time with a pulled goalie stays in its manpower group. A goalie pull during a PP is rare.
 
-**On `fct_team_game_situations`** (already in the column list): `seconds` and, for every
+**On `fct_team_game_situations`** (already in the column list): `situation_seconds` and, for every
 situation, `goals_for_per_2_min`, `goals_against_per_2_min`, `xg_for_per_2_min`,
-`xg_against_per_2_min` (= value × 120 / seconds, null when seconds is 0).
+`xg_against_per_2_min` (= value × 120 / situation_seconds, null when it is 0).
 - Power play: `pp` row, `*_for_per_2_min`.
 - Penalty kill: `pk` row, `*_against_per_2_min`.
 - Shorthanded chances generated: `pk` row, `shots_on_goal_for`, `xg_for`,
@@ -391,6 +444,8 @@ On `fct_team_game_situations` / `fct_team_season_situations`, for every situatio
 | `pdo` | `shooting_pct + save_pct`, on a 1.000 scale (league average ≈ 1.000) |
 | `goal_diff_above_expected` | (goals for − goals against) − (xG for − xG against), on shots that have xG |
 
+- **Built:** both team marts also carry `empty_net_goals_for` / `_against`, so season PDO can be
+  recomputed from summed counts. `goal_diff_above_expected` is additive, so seasons sum it.
 - Empty-net goals are left out of PDO and luck in the `all` row: no goalie, no xG. In
   `ev`/`pp`/`pk` they're already excluded. The descriptions say so.
 - `ev` includes 4v4 and 3v3 overtime. 3v3 is <2% of shots, so `ev` is close to 5v5, but

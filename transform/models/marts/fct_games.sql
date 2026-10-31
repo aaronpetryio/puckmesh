@@ -9,6 +9,13 @@ seasons as (
     from {{ ref('stg_pwhl__seasons') }}
 ),
 
+game_venues as (
+    select
+        game_id,
+        is_neutral_site
+    from {{ ref('int_game_venues_classified') }}
+),
+
 teams as (
     select
         team_id,
@@ -61,6 +68,8 @@ select
     games.game_date,
     games.scheduled_start_at,
     games.attendance,
+    games.venue_id,
+    game_venues.is_neutral_site,
     games.is_final,
 
     games.home_team_id,
@@ -99,6 +108,7 @@ left join teams as home
 left join teams as away
     on games.away_team_id = away.team_id
     and games.season_id = away.season_id
+inner join game_venues on games.game_id = game_venues.game_id
 left join shootouts on games.game_id = shootouts.game_id
 left join shot_totals as home_shots
     on games.game_id = home_shots.game_id

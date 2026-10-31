@@ -1,3 +1,7 @@
+-- A table, not a view (dbt.md: promote when measured): three rows, read by two marts and
+-- five tests, each of which recomputed int_shots_enriched as a view (~13 s apiece).
+{{ config(materialized='table') }}
+
 -- Gamma-Poisson empirical Bayes (docs/plans/metrics.md, step 2). Each player has a
 -- multiplier on xG (goals per xG for shooters, goals allowed per xG faced for goalies) that
 -- varies around the group average m with variance tau^2. Poisson noise alone would make

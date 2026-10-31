@@ -26,9 +26,27 @@ vars:
   rink_goal_line_ft: 89      # goal line from center ice (11 ft from the end boards)
 
   regulation_period_seconds: 1200   # 20 minutes; overtime counts from 3 x 1200
+  # PWHL rulebook: regular-season overtime is five minutes of 3-on-3, then a shootout.
+  # Playoff overtime is 20-minute periods until a goal.
+  regular_season_overtime_seconds: 300
 
   # A shot this soon after the same team's previous unblocked shot counts as a rebound.
   rebound_window_seconds: 3
+
+  # A game is at a neutral site (the league's Takeover Tour, one team listed as home) when
+  # at least this many teams play regular-season or playoff home games at its venue that
+  # season year. A team's second arena in its own city (a bigger one for big games) hosts
+  # only that team, so stays home; the cost is that a one-off Takeover game hosting a single
+  # team counts as home. Checked against 2024-2027 venues (docs/plans/metrics.md, step 3);
+  # "to be announced" Takeover arenas share one venue ID, which this treats as neutral.
+  neutral_site_min_home_teams: 2
+
+  # Score states for the score-and-venue adjustment: leads beyond this are pooled, since 3+
+  # goal states are too rare to estimate alone (docs/plans/metrics.md, step 3).
+  score_state_cap: 2
+
+  # Rates per this many seconds: a minor penalty, so a pp row reads per full power play.
+  minor_penalty_seconds: 120
 
   # The xG model fct_shots publishes. Same value as MODEL_VERSION in ml/xg/model.py;
   # change both together.
