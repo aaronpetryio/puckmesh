@@ -26,6 +26,7 @@ shots as (
         strength_group,
         shot_result,
         is_goal,
+        is_empty_net,
         is_quality_chance,
         xg
     from {{ ref('fct_shots') }}
@@ -175,6 +176,11 @@ totals as (
         count_if(not is_for and is_quality_chance) as quality_chances_against,
         count_if(is_for and is_goal) as goals_for,
         count_if(not is_for and is_goal) as goals_against,
+        count_if(is_for and is_empty_net) as empty_net_goals_for,
+        count_if(not is_for and is_empty_net) as empty_net_goals_against,
+        -- Goals on the shots that have xG, for goals minus xG.
+        count_if(is_for and is_goal and xg is not null) as scored_goals_for,
+        count_if(not is_for and is_goal and xg is not null) as scored_goals_against,
 
         sum(case when is_for and shot_result != 'blocked' then weight_shots_on_goal end)
             as shots_on_goal_for_adjusted,
@@ -269,6 +275,10 @@ filled as (
         coalesce(totals.quality_chances_against, 0) as quality_chances_against,
         coalesce(totals.goals_for, 0) as goals_for,
         coalesce(totals.goals_against, 0) as goals_against,
+        coalesce(totals.empty_net_goals_for, 0) as empty_net_goals_for,
+        coalesce(totals.empty_net_goals_against, 0) as empty_net_goals_against,
+        coalesce(totals.scored_goals_for, 0) as scored_goals_for,
+        coalesce(totals.scored_goals_against, 0) as scored_goals_against,
 
         situations.situation in ('all', 'ev') as is_adjusted,
         totals.shots_on_goal_for_adjusted,
@@ -343,6 +353,8 @@ select
     quality_chances_against,
     goals_for,
     goals_against,
+    empty_net_goals_for,
+    empty_net_goals_against,
 
     shots_on_goal_for / nullif(shots_on_goal_for + shots_on_goal_against, 0)
         as shots_on_goal_share,
@@ -376,5 +388,16 @@ select
     120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
     120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
     120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
-    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min
+    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min,
+
+    -- PDO on shots at a goalie: empty-net goals have no goalie to beat.
+    (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)
+        as shooting_pct,
+    1 - (goals_against - empty_net_goals_against)
+    / nullif(shots_on_goal_against - empty_net_goals_against, 0) as save_pct,
+    (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)
+    + 1 - (goals_against - empty_net_goals_against)
+    / nullif(shots_on_goal_against - empty_net_goals_against, 0) as pdo,
+    (scored_goals_for - xg_for) - (scored_goals_against - xg_against)
+        as goal_diff_above_expected
 from adjusted

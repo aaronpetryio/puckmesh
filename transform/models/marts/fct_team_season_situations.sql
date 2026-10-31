@@ -23,6 +23,9 @@ totals as (
         sum(quality_chances_against) as quality_chances_against,
         sum(goals_for) as goals_for,
         sum(goals_against) as goals_against,
+        sum(empty_net_goals_for) as empty_net_goals_for,
+        sum(empty_net_goals_against) as empty_net_goals_against,
+        sum(goal_diff_above_expected) as goal_diff_above_expected,
         sum(shots_on_goal_for_adjusted) as shots_on_goal_for_adjusted,
         sum(shots_on_goal_against_adjusted) as shots_on_goal_against_adjusted,
         sum(shot_attempts_for_adjusted) as shot_attempts_for_adjusted,
@@ -54,6 +57,8 @@ select
     quality_chances_against,
     goals_for,
     goals_against,
+    empty_net_goals_for,
+    empty_net_goals_against,
 
     shots_on_goal_for / nullif(shots_on_goal_for + shots_on_goal_against, 0)
         as shots_on_goal_share,
@@ -86,5 +91,15 @@ select
     120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
     120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
     120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
-    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min
+    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min,
+
+    (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)
+        as shooting_pct,
+    1 - (goals_against - empty_net_goals_against)
+    / nullif(shots_on_goal_against - empty_net_goals_against, 0) as save_pct,
+    (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)
+    + 1 - (goals_against - empty_net_goals_against)
+    / nullif(shots_on_goal_against - empty_net_goals_against, 0) as pdo,
+    -- Additive, so it's summed from the games.
+    goal_diff_above_expected
 from totals

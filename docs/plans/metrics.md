@@ -1,7 +1,7 @@
 # Plan: PWHL metrics on top of xG
 
 Status: plan signed off. Steps 1–2 (GSAx, finishing) merged; validation query not yet run.
-Steps 3–5 in progress; 6–8 to come. See [Decisions](#decisions) for
+Steps 3–5 built (PR C), waiting on CI; 6–8 to come. See [Decisions](#decisions) for
 what needs a yes before each step starts.
 
 Eight metric groups, built in order, each on the ones before it:
@@ -278,7 +278,7 @@ with a net empty, so they don't add up to `all`. A team's `pp` row mirrors its o
 |---|---|
 | `league_id`, `game_id`, `team_id`, `situation` | keys |
 | `season_id`, `season_type`, `game_date`, `opponent_team_id`, `is_home_team` | |
-| `seconds` | time in the situation (step 4); game length for `all` |
+| `situation_seconds` | time in the situation (step 4); game length for `all`. Not `seconds`, a SQL keyword |
 | `shots_on_goal_for` / `_against` | |
 | `shot_attempts_for` / `_against` | shots on goal + blocked. Not Corsi: no missed shots |
 | `xg_for` / `_against` | |
@@ -370,9 +370,9 @@ ended it), the start of overtime (3-on-3 rules in regular season), and the game'
   (style guide: three or more).
 - Known gap: time with a pulled goalie stays in its manpower group. A goalie pull during a PP is rare.
 
-**On `fct_team_game_situations`** (already in the column list): `seconds` and, for every
+**On `fct_team_game_situations`** (already in the column list): `situation_seconds` and, for every
 situation, `goals_for_per_2_min`, `goals_against_per_2_min`, `xg_for_per_2_min`,
-`xg_against_per_2_min` (= value × 120 / seconds, null when seconds is 0).
+`xg_against_per_2_min` (= value × 120 / situation_seconds, null when it is 0).
 - Power play: `pp` row, `*_for_per_2_min`.
 - Penalty kill: `pk` row, `*_against_per_2_min`.
 - Shorthanded chances generated: `pk` row, `shots_on_goal_for`, `xg_for`,
@@ -403,6 +403,8 @@ On `fct_team_game_situations` / `fct_team_season_situations`, for every situatio
 | `pdo` | `shooting_pct + save_pct`, on a 1.000 scale (league average ≈ 1.000) |
 | `goal_diff_above_expected` | (goals for − goals against) − (xG for − xG against), on shots that have xG |
 
+- **Built:** both team marts also carry `empty_net_goals_for` / `_against`, so season PDO can be
+  recomputed from summed counts. `goal_diff_above_expected` is additive, so seasons sum it.
 - Empty-net goals are left out of PDO and luck in the `all` row: no goalie, no xG. In
   `ev`/`pp`/`pk` they're already excluded. The descriptions say so.
 - `ev` includes 4v4 and 3v3 overtime. 3v3 is <2% of shots, so `ev` is close to 5v5, but

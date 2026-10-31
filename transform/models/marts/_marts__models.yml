@@ -717,6 +717,10 @@ models:
           This team's goals; in all, empty-net goals too. No penalty-shot or shootout goals.
       - name: goals_against
         description: The opponent's goals, counted the same way.
+      - name: empty_net_goals_for
+        description: Goals into an empty net by this team, included in goals_for.
+      - name: empty_net_goals_against
+        description: Empty-net goals by the opponent, included in goals_against.
       - name: shots_on_goal_share
         description: shots_on_goal_for / (for + against). Null when both are 0.
         data_tests:
@@ -801,6 +805,23 @@ models:
           the shorthanded chances generated.
       - name: xg_against_per_2_min
         description: xg_against per 2 minutes. On a pk row, xG allowed per penalty kill.
+      - name: shooting_pct
+        description: >
+          Goals per shot on goal at a goalie (empty-net goals left out of both). The first
+          half of PDO.
+      - name: save_pct
+        description: >
+          1 - goals against per opponent shot on goal at a goalie (empty-net goals left out).
+      - name: pdo
+        description: >
+          shooting_pct + save_pct, on a 1.000 scale. League average is about 1.000; far from
+          it over a season usually means luck that tends back toward average. ev is even
+          strength, including 4-on-4 and 3-on-3 overtime, not 5v5 only.
+      - name: goal_diff_above_expected
+        description: >
+          (goals for - xG for) - (goals against - xG against), on shots that have xG, so no
+          empty-net goals: goal differential beyond what the chances on both sides deserved.
+          Mostly finishing and goaltending luck. Sums to 0 across the two teams in a game.
   - name: fct_team_season_situations
     description: >
       One row per team per season per situation (all, ev, pp, pk): the game rows of
@@ -870,6 +891,10 @@ models:
           This team's goals; in all, empty-net goals too. No penalty-shot or shootout goals.
       - name: goals_against
         description: The opponent's goals, counted the same way.
+      - name: empty_net_goals_for
+        description: Goals into an empty net by this team, included in goals_for.
+      - name: empty_net_goals_against
+        description: Empty-net goals by the opponent, included in goals_against.
       - name: shots_on_goal_share
         description: shots_on_goal_for / (for + against). Null when both are 0.
         data_tests:
@@ -954,6 +979,33 @@ models:
           the shorthanded chances generated.
       - name: xg_against_per_2_min
         description: xg_against per 2 minutes. On a pk row, xG allowed per penalty kill.
+      - name: shooting_pct
+        description: >
+          Goals per shot on goal at a goalie (empty-net goals left out of both). The first
+          half of PDO.
+      - name: save_pct
+        description: >
+          1 - goals against per opponent shot on goal at a goalie (empty-net goals left out).
+      - name: pdo
+        data_tests:
+          - dbt_utils.accepted_range:
+              name: fct_team_season_situations_pdo_plausible
+              arguments:
+                min_value: 0.7
+                max_value: 1.3
+              config:
+                where: "situation in ('all', 'ev')"
+                severity: warn
+        description: >
+          shooting_pct + save_pct, on a 1.000 scale. League average is about 1.000; far from
+          it over a season usually means luck that tends back toward average. ev is even
+          strength, including 4-on-4 and 3-on-3 overtime, not 5v5 only. Warns outside 0.7 to
+          1.3 for a whole season at all or ev, which would suggest a counting bug.
+      - name: goal_diff_above_expected
+        description: >
+          (goals for - xG for) - (goals against - xG against), on shots that have xG, so no
+          empty-net goals: goal differential beyond what the chances on both sides deserved.
+          Mostly finishing and goaltending luck. Sums to 0 across the two teams in a game.
 unit_tests:
   - name: fct_goalie_games_credits_shots_and_starters
     description: >
