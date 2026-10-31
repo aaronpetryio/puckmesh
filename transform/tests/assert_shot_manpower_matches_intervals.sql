@@ -1,11 +1,13 @@
 -- Shots and the strength intervals rebuild manpower from the same penalties, one by event
--- order and one by clock, so their strength groups should agree. They can legitimately
--- differ in the second a penalty starts or a power-play goal ends one: a shot in that
--- second follows event order, an interval follows the clock. Warns on any mismatch so the
--- count shows in the build log; fails above 250 (about 1% of shots), which would mean the
--- two rules have drifted apart (docs/plans/metrics.md, step 4).
+-- order and one by clock, so their strength groups should agree. They legitimately differ
+-- in the second manpower changes: a power-play goal's own shot comes in the same second as
+-- the goal that ends the penalty (still a power play by event order, the next interval by
+-- clock), and a shot can come in the second a penalty is called. The first CI run had 402
+-- such shots, so shots in a second where an interval starts are skipped. Everywhere else
+-- the two rules must agree; the small allowance is for data quirks, and the warning shows
+-- the count in the build log (docs/plans/metrics.md, step 4).
 -- Returns the shots that disagree.
-{{ config(warn_if='>0', error_if='>250') }}
+{{ config(warn_if='>0', error_if='>25') }}
 
 with shots as (
     select
@@ -41,6 +43,14 @@ matched as (
         on shots.game_id = strength_intervals.game_id
         and shots.game_seconds >= strength_intervals.start_game_seconds
         and shots.game_seconds < strength_intervals.end_game_seconds
+    -- Skip shots in a second where manpower changes (an interval starts there).
+    where not exists (
+        select 1
+        from strength_intervals as manpower_changes
+        where
+            shots.game_id = manpower_changes.game_id
+            and shots.game_seconds = manpower_changes.start_game_seconds
+    )
 )
 
 select *
