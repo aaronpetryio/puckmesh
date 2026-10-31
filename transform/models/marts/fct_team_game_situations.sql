@@ -49,6 +49,11 @@ situations as (
     select explode(array('all', 'ev', 'pp', 'pk')) as situation
 ),
 
+shot_games as (
+    select distinct game_id
+    from shots
+),
+
 team_games as (
     -- Both teams of every game with play-by-play.
     select
@@ -57,7 +62,7 @@ team_games as (
         games.away_team_id as opponent_team_id,
         true as is_home_team
     from games
-    where games.game_id in (select shots.game_id from shots)
+    where games.game_id in (select shot_games.game_id from shot_games)
 
     union all
 
@@ -67,14 +72,30 @@ team_games as (
         games.home_team_id as opponent_team_id,
         false as is_home_team
     from games
-    where games.game_id in (select shots.game_id from shots)
+    where games.game_id in (select shot_games.game_id from shot_games)
+),
+
+shot_states as (
+    -- The weights' lookup keys: the shooting team's venue and its own capped score state.
+    select
+        shots.*,
+        case
+            when games.is_neutral_site then 'neutral'
+            when shots.is_home_team then 'home'
+            else 'away'
+        end as shooter_venue,
+        greatest(
+            least(shots.score_diff, {{ var('score_state_cap') }}), -{{ var('score_state_cap') }}
+        ) as score_state
+    from shots
+    inner join games on shots.game_id = games.game_id
 ),
 
 weighted_shots as (
-    -- Each shot's adjustment weight, from the shooting team's venue and its own score
-    -- state. The same weight counts the shot for the shooter and against the defender.
+    -- Each shot's adjustment weight. The same weight counts the shot for the shooter and
+    -- against the defender.
     select
-        shots.*,
+        shot_states.* except (shooter_venue, score_state),
         all_weights.weight_shots_on_goal as all_weight_shots_on_goal,
         all_weights.weight_shot_attempts as all_weight_shot_attempts,
         all_weights.weight_xg as all_weight_xg,
@@ -83,29 +104,16 @@ weighted_shots as (
         ev_weights.weight_shot_attempts as ev_weight_shot_attempts,
         ev_weights.weight_xg as ev_weight_xg,
         ev_weights.weight_quality_chances as ev_weight_quality_chances
-    from shots
-    inner join games on shots.game_id = games.game_id
+    from shot_states
     left join weights as all_weights
-        on all_weights.situation = 'all'
-        and all_weights.shooter_venue = case
-            when games.is_neutral_site then 'neutral'
-            when shots.is_home_team then 'home'
-            else 'away'
-        end
-        and all_weights.score_state = greatest(
-            least(shots.score_diff, {{ var('score_state_cap') }}), -{{ var('score_state_cap') }}
-        )
+        on shot_states.shooter_venue = all_weights.shooter_venue
+        and shot_states.score_state = all_weights.score_state
+        and all_weights.situation = 'all'
     left join weights as ev_weights
-        on ev_weights.situation = 'ev'
-        and shots.strength_group = 'ev'
-        and ev_weights.shooter_venue = case
-            when games.is_neutral_site then 'neutral'
-            when shots.is_home_team then 'home'
-            else 'away'
-        end
-        and ev_weights.score_state = greatest(
-            least(shots.score_diff, {{ var('score_state_cap') }}), -{{ var('score_state_cap') }}
-        )
+        on shot_states.shooter_venue = ev_weights.shooter_venue
+        and shot_states.score_state = ev_weights.score_state
+        and shot_states.strength_group = 'ev'
+        and ev_weights.situation = 'ev'
 ),
 
 credits as (

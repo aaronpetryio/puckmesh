@@ -1,3 +1,8 @@
+-- A table, not a view (dbt.md: promote when measured): it's 30 rows, but as a view every
+-- reader and test recomputed int_shots_enriched, about 80 s each, and the team mart joins it
+-- twice (a 12-minute CI build).
+{{ config(materialized='table') }}
+
 -- Score-and-venue adjustment, McCurdy's method (docs/plans/metrics.md, step 3). Across the
 -- league, p(h) is the home team's share of a measure while the home team leads by h
 -- (capped at +-score_state_cap). From the shooting team's side, with its own lead d:
