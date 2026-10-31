@@ -147,11 +147,14 @@ playoffs). Rows exist for anyone with a shot at a goalie or a goalie game.
   τ² = (Σ(G − X)² − ΣX) / ΣX², summed over regular-season player-seasons. If that comes out
   ≤ 0, the data can't tell shooters apart and everyone is shrunk fully to the average. One
   `select` in SQL, no new dependency.
-- **Shrink toward the position group (F or D), not the whole league.** Step 5 of the xG plan
-  found defenders beat pooled xG (three in the top 15 by goals above xG), likely point shots
-  through traffic the data can't see. Shrinking a defender toward a forward-dominated league
-  average would pull them too far. m is the group's goals / xG, pooled over all
-  regular-season player-seasons; α is pooled across groups (each group alone is too small).
+- **Shrink toward the position group (F or D), not the whole league.** Forwards and
+  defenders finish differently against pooled xG, so each is shrunk toward its own average.
+  m and α are both estimated per group, over all its regular-season player-seasons.
+  - *Correction, after the first run:* this plan first said defenders *beat* pooled xG,
+    from three defenders in the xG plan's top 15. As a group they score about 8% *below* xG
+    (m = 0.92, below). The top-15 defenders were the lucky ones. Shrinking toward the group
+    still holds, and matters more: shrinking toward the league's 1.04 would overrate every
+    defender.
 - **Careers use the same m and α** on career totals. Under the model, skill is fixed, so the
   same formula applies to a bigger sample. That's why careers are their own mart.
 - **Why not beta-binomial on shooting %:** it ignores shot quality, which is the point of
@@ -249,6 +252,39 @@ group by kind
 
 For goalies the "above expected" here is goals allowed minus xG faced, i.e. −GSAx. The sign
 doesn't matter for squared error.
+
+**Results** (dev, after PR #21; lower is better):
+
+The priors, from `int_finishing_priors_estimated`:
+
+| Group | Player-seasons | m (goals per xG) | τ² | prior_xg (α) |
+|---|---|---|---|---|
+| F | 294 | 1.040 | 0.0349 | 29.8 |
+| D | 150 | 0.923 | −0.0054 | null: shrunk fully to m |
+| G | 49 | 1.019 | 0.0064 | 160.4 |
+
+Next-season prediction:
+
+| Kind | Pairs | MSE, predict 0 | MSE, raw | MSE, shrunk |
+|---|---|---|---|---|
+| Shooters | 216 | 4.33 | 7.71 | **4.14** |
+| Goalies | 23 | 55.9 | **49.4** | 54.4 |
+
+- **Shooters: shrinkage works.** Copying last season's raw finishing is much worse than
+  predicting zero, because one season is mostly luck. Shrunk is best, about 5% better than
+  zero. Real finishing skill exists among forwards, but it's a weak signal: a forward needs
+  about 30 xG of her own before her record counts as much as the average.
+- **Defenders: no detectable finishing skill.** τ² is negative, so every defender's shrunk
+  value is just the group's −8%. The site should show defenders' raw goals above expected,
+  with that note, rather than a shrunk number that carries no individual information.
+- **Goalies: raw wins, so α_G looks too large, but only 23 pairs.** The method-of-moments
+  estimate weights goalie-seasons by workload already, so backups aren't the cause. A
+  likely one: team defense that xG doesn't see (screens, passes), which persists year to
+  year with the same goalie and makes raw GSAx repeat without it being her skill.
+  - **Decision:** keep the method. Choosing α_G to win this 23-pair check would fit noise.
+  - The site shows raw and shrunk GSAx side by side, noting that goalie shrinkage is
+    uncertain at this sample size.
+  - Re-run this check after 2026-27, which adds a season of pairs.
 
 Tests:
 - Grain on both marts.
