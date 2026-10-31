@@ -413,6 +413,11 @@ models:
                 field: team_id
       - name: opponent_team_id
         description: The other team in the game.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
       - name: is_home_team
         description: The goalie's team is the home team.
       - name: is_starter
@@ -602,6 +607,68 @@ models:
                 max_value: 1
 
 unit_tests:
+  - name: fct_goalie_games_credits_shots_and_starters
+    description: >
+      Home goalie 5 starts, is pulled, and goalie 7 comes in. Away goalie 6 starts; goalie
+      8 faces a shot with no goalie change recorded and still gets a row. A blocked shot,
+      an empty-net goal, an unscored shot and a preseason game are left out.
+    model: fct_goalie_games
+    given:
+      - input: ref('fct_games')
+        rows:
+          - {game_id: 1, season_id: 1, season_type: regular, game_date: 2026-01-01,
+             home_team_id: 10, away_team_id: 20}
+          - {game_id: 2, season_id: 2, season_type: preseason, game_date: 2025-11-01,
+             home_team_id: 10, away_team_id: 20}
+      - input: ref('stg_pwhl__goalie_changes')
+        rows:
+          - {league_id: pwhl, game_id: 1, event_index: 0, team_id: 10, goalie_in_player_id: 5}
+          - {league_id: pwhl, game_id: 1, event_index: 1, team_id: 20, goalie_in_player_id: 6}
+          - {league_id: pwhl, game_id: 1, event_index: 50, team_id: 10,
+             goalie_in_player_id: null}
+          - {league_id: pwhl, game_id: 1, event_index: 60, team_id: 10, goalie_in_player_id: 7}
+          - {league_id: pwhl, game_id: 2, event_index: 0, team_id: 10, goalie_in_player_id: 5}
+      - input: ref('fct_shots')
+        rows:
+          - {league_id: pwhl, game_id: 1, event_index: 10, defending_team_id: 10,
+             goalie_player_id: 5, is_unblocked: true, is_empty_net: false, is_goal: false,
+             xg: 0.25}
+          - {league_id: pwhl, game_id: 1, event_index: 11, defending_team_id: 10,
+             goalie_player_id: 5, is_unblocked: true, is_empty_net: false, is_goal: true,
+             xg: 0.25}
+          - {league_id: pwhl, game_id: 1, event_index: 61, defending_team_id: 10,
+             goalie_player_id: 7, is_unblocked: true, is_empty_net: false, is_goal: false,
+             xg: 0.25}
+          - {league_id: pwhl, game_id: 1, event_index: 12, defending_team_id: 20,
+             goalie_player_id: 6, is_unblocked: true, is_empty_net: false, is_goal: true,
+             xg: 0.5}
+          - {league_id: pwhl, game_id: 1, event_index: 13, defending_team_id: 20,
+             goalie_player_id: 8, is_unblocked: true, is_empty_net: false, is_goal: false,
+             xg: 0.75}
+          # Left out: blocked, empty-net goal, not yet scored.
+          - {league_id: pwhl, game_id: 1, event_index: 14, defending_team_id: 20,
+             goalie_player_id: 6, is_unblocked: false, is_empty_net: false, is_goal: false,
+             xg: null}
+          - {league_id: pwhl, game_id: 1, event_index: 55, defending_team_id: 10,
+             goalie_player_id: 5, is_unblocked: true, is_empty_net: true, is_goal: true,
+             xg: null}
+          - {league_id: pwhl, game_id: 1, event_index: 15, defending_team_id: 20,
+             goalie_player_id: 6, is_unblocked: true, is_empty_net: false, is_goal: true,
+             xg: null}
+    expect:
+      rows:
+        - {game_id: 1, player_id: 5, team_id: 10, opponent_team_id: 20, is_home_team: true,
+           is_starter: true, shots_faced: 2, goals_allowed: 1, xg_faced: 0.5, gsax: -0.5,
+           gsax_per_100_shots: -25.0}
+        - {game_id: 1, player_id: 7, team_id: 10, opponent_team_id: 20, is_home_team: true,
+           is_starter: false, shots_faced: 1, goals_allowed: 0, xg_faced: 0.25, gsax: 0.25,
+           gsax_per_100_shots: 25.0}
+        - {game_id: 1, player_id: 6, team_id: 20, opponent_team_id: 10, is_home_team: false,
+           is_starter: true, shots_faced: 1, goals_allowed: 1, xg_faced: 0.5, gsax: -0.5,
+           gsax_per_100_shots: -50.0}
+        - {game_id: 1, player_id: 8, team_id: 20, opponent_team_id: 10, is_home_team: false,
+           is_starter: false, shots_faced: 1, goals_allowed: 0, xg_faced: 0.75, gsax: 0.75,
+           gsax_per_100_shots: 75.0}
   - name: fct_player_seasons_shrinks_toward_the_prior
     description: >
       Forward 1: 4 goals on 2.0 xG, prior m = 1 and prior_xg = 2, so the estimate is
