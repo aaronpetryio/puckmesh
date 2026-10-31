@@ -1,6 +1,6 @@
 -- Score-and-venue adjustment, McCurdy's method (docs/plans/metrics.md, step 3). Across the
 -- league, p(h) is the home team's share of a measure while the home team leads by h
--- (capped at +-2). From the shooting team's side, with its own lead d:
+-- (capped at +-score_state_cap). From the shooting team's side, with its own lead d:
 --   home:    expected share p(d)
 --   away:    1 - p(-d), the mirror of the home team trailing by d
 --   neutral: the average of the two, since there is no venue effect
@@ -47,9 +47,13 @@ events as (
         shots.is_home_team,
         shots.strength_group,
         greatest(
-            least(case when shots.is_home_team then shots.score_diff else -shots.score_diff end, 2),
-            -2
+            least(
+                case when shots.is_home_team then shots.score_diff else -shots.score_diff end,
+                {{ var('score_state_cap') }}
+            ),
+            -{{ var('score_state_cap') }}
         ) as home_score_state,
+        -- shot_result is never null (tested in staging).
         case when shots.shot_result != 'blocked' then 1 else 0 end as shots_on_goal,
         1 as shot_attempts,
         coalesce(xg_predictions.xg, 0) as xg,

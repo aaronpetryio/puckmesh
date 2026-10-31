@@ -1007,6 +1007,67 @@ models:
           empty-net goals: goal differential beyond what the chances on both sides deserved.
           Mostly finishing and goaltending luck. Sums to 0 across the two teams in a game.
 unit_tests:
+  - name: fct_team_game_situations_credits_situations
+    description: >
+      The home team has a two-minute power play from 3000 to 3120. A home shot at even
+      strength counts in ev and all; a home power-play shot counts for the home pp row and
+      against the away pk row; the away team's shorthanded shot counts for its pk row and
+      against the home pp row; an away shot with a net empty counts only in all. Time
+      mirrors: 120 s of home pp is 120 s of away pk.
+    model: fct_team_game_situations
+    given:
+      - input: ref('fct_games')
+        rows:
+          - {league_id: pwhl, game_id: 1, season_id: 1, season_type: regular,
+             game_date: 2026-01-01, home_team_id: 10, away_team_id: 20,
+             is_neutral_site: false, is_final: true}
+      - input: ref('fct_shots')
+        rows:
+          - {game_id: 1, event_index: 1, shooting_team_id: 10, defending_team_id: 20,
+             is_home_team: true, score_diff: 0, strength_group: ev, shot_result: on_net,
+             is_goal: false, is_empty_net: false, is_quality_chance: false, xg: 0.25}
+          - {game_id: 1, event_index: 2, shooting_team_id: 10, defending_team_id: 20,
+             is_home_team: true, score_diff: 0, strength_group: pp, shot_result: on_net,
+             is_goal: false, is_empty_net: false, is_quality_chance: false, xg: 0.25}
+          - {game_id: 1, event_index: 3, shooting_team_id: 20, defending_team_id: 10,
+             is_home_team: false, score_diff: 0, strength_group: pk, shot_result: on_net,
+             is_goal: false, is_empty_net: false, is_quality_chance: false, xg: 0.25}
+          - {game_id: 1, event_index: 4, shooting_team_id: 20, defending_team_id: 10,
+             is_home_team: false, score_diff: 0, strength_group: en, shot_result: on_net,
+             is_goal: false, is_empty_net: false, is_quality_chance: false, xg: 0.25}
+      - input: ref('int_score_venue_weights_estimated')
+        rows:
+          - {situation: all, shooter_venue: home, score_state: 0, weight_shots_on_goal: 1.0,
+             weight_shot_attempts: 1.0, weight_xg: 1.0, weight_quality_chances: 1.0}
+          - {situation: all, shooter_venue: away, score_state: 0, weight_shots_on_goal: 1.0,
+             weight_shot_attempts: 1.0, weight_xg: 1.0, weight_quality_chances: 1.0}
+          - {situation: ev, shooter_venue: home, score_state: 0, weight_shots_on_goal: 1.0,
+             weight_shot_attempts: 1.0, weight_xg: 1.0, weight_quality_chances: 1.0}
+          - {situation: ev, shooter_venue: away, score_state: 0, weight_shots_on_goal: 1.0,
+             weight_shot_attempts: 1.0, weight_xg: 1.0, weight_quality_chances: 1.0}
+      - input: ref('int_strength_intervals_derived')
+        rows:
+          - {game_id: 1, duration_seconds: 3000, home_skaters: 5, away_skaters: 5}
+          - {game_id: 1, duration_seconds: 120, home_skaters: 5, away_skaters: 4}
+          - {game_id: 1, duration_seconds: 480, home_skaters: 5, away_skaters: 5}
+    expect:
+      rows:
+        - {team_id: 10, situation: all, situation_seconds: 3600, shots_on_goal_for: 2,
+           shots_on_goal_against: 2, shots_on_goal_for_adjusted: 2.0}
+        - {team_id: 10, situation: ev, situation_seconds: 3480, shots_on_goal_for: 1,
+           shots_on_goal_against: 0, shots_on_goal_for_adjusted: 1.0}
+        - {team_id: 10, situation: pp, situation_seconds: 120, shots_on_goal_for: 1,
+           shots_on_goal_against: 1, shots_on_goal_for_adjusted: null}
+        - {team_id: 10, situation: pk, situation_seconds: 0, shots_on_goal_for: 0,
+           shots_on_goal_against: 0, shots_on_goal_for_adjusted: null}
+        - {team_id: 20, situation: all, situation_seconds: 3600, shots_on_goal_for: 2,
+           shots_on_goal_against: 2, shots_on_goal_for_adjusted: 2.0}
+        - {team_id: 20, situation: ev, situation_seconds: 3480, shots_on_goal_for: 0,
+           shots_on_goal_against: 1, shots_on_goal_for_adjusted: 0.0}
+        - {team_id: 20, situation: pp, situation_seconds: 0, shots_on_goal_for: 0,
+           shots_on_goal_against: 0, shots_on_goal_for_adjusted: null}
+        - {team_id: 20, situation: pk, situation_seconds: 120, shots_on_goal_for: 1,
+           shots_on_goal_against: 1, shots_on_goal_for_adjusted: null}
   - name: fct_goalie_games_credits_shots_and_starters
     description: >
       Home goalie 5 starts, is pulled, and goalie 7 comes in. Away goalie 6 starts; goalie

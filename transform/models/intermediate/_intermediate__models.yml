@@ -96,6 +96,9 @@ models:
     columns:
       - name: game_id
         data_tests: [unique, not_null]
+      - name: season_year
+        description: The year the season ends. A null would lump games across seasons.
+        data_tests: [not_null]
       - name: home_games_at_venue
         description: Games the home team hosts at this venue in the season year.
       - name: is_neutral_site
@@ -135,14 +138,37 @@ models:
                 min_value: 0
                 max_value: 1
                 inclusive: false
-      - name: expected_share_xg
+      - name: expected_share_shots_on_goal
         data_tests:
+          - not_null
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
                 max_value: 1
                 inclusive: false
+      - name: expected_share_quality_chances
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: false
+      - name: expected_share_xg
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: false
+      - name: weight_shots_on_goal
+        data_tests: [not_null]
       - name: weight_shot_attempts
+        data_tests: [not_null]
+      - name: weight_xg
+        data_tests: [not_null]
+      - name: weight_quality_chances
         data_tests: [not_null]
 
   - name: int_strength_intervals_derived

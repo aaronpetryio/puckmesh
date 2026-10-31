@@ -92,7 +92,9 @@ weighted_shots as (
             when shots.is_home_team then 'home'
             else 'away'
         end
-        and all_weights.score_state = greatest(least(shots.score_diff, 2), -2)
+        and all_weights.score_state = greatest(
+            least(shots.score_diff, {{ var('score_state_cap') }}), -{{ var('score_state_cap') }}
+        )
     left join weights as ev_weights
         on ev_weights.situation = 'ev'
         and shots.strength_group = 'ev'
@@ -101,7 +103,9 @@ weighted_shots as (
             when shots.is_home_team then 'home'
             else 'away'
         end
-        and ev_weights.score_state = greatest(least(shots.score_diff, 2), -2)
+        and ev_weights.score_state = greatest(
+            least(shots.score_diff, {{ var('score_state_cap') }}), -{{ var('score_state_cap') }}
+        )
 ),
 
 credits as (
@@ -385,10 +389,14 @@ select
         as quality_chance_share_adjusted,
 
     -- Per 2 minutes, the length of a minor: on the pp row, xG per full power play.
-    120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
-    120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
-    120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
-    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min,
+    {{ var('minor_penalty_seconds') }} * goals_for / nullif(situation_seconds, 0)
+        as goals_for_per_2_min,
+    {{ var('minor_penalty_seconds') }} * goals_against / nullif(situation_seconds, 0)
+        as goals_against_per_2_min,
+    {{ var('minor_penalty_seconds') }} * xg_for / nullif(situation_seconds, 0)
+        as xg_for_per_2_min,
+    {{ var('minor_penalty_seconds') }} * xg_against / nullif(situation_seconds, 0)
+        as xg_against_per_2_min,
 
     -- PDO on shots at a goalie: empty-net goals have no goalie to beat.
     (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)

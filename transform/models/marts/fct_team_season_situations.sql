@@ -88,10 +88,14 @@ select
     / nullif(quality_chances_for_adjusted + quality_chances_against_adjusted, 0)
         as quality_chance_share_adjusted,
 
-    120 * goals_for / nullif(situation_seconds, 0) as goals_for_per_2_min,
-    120 * goals_against / nullif(situation_seconds, 0) as goals_against_per_2_min,
-    120 * xg_for / nullif(situation_seconds, 0) as xg_for_per_2_min,
-    120 * xg_against / nullif(situation_seconds, 0) as xg_against_per_2_min,
+    {{ var('minor_penalty_seconds') }} * goals_for / nullif(situation_seconds, 0)
+        as goals_for_per_2_min,
+    {{ var('minor_penalty_seconds') }} * goals_against / nullif(situation_seconds, 0)
+        as goals_against_per_2_min,
+    {{ var('minor_penalty_seconds') }} * xg_for / nullif(situation_seconds, 0)
+        as xg_for_per_2_min,
+    {{ var('minor_penalty_seconds') }} * xg_against / nullif(situation_seconds, 0)
+        as xg_against_per_2_min,
 
     (goals_for - empty_net_goals_for) / nullif(shots_on_goal_for - empty_net_goals_for, 0)
         as shooting_pct,
