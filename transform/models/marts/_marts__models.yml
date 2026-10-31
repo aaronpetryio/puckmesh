@@ -719,13 +719,18 @@ unit_tests:
           - {prior_group: D, prior_goals_per_xg: 1.5, prior_xg: null}
           - {prior_group: G, prior_goals_per_xg: 1.0, prior_xg: 4.0}
     expect:
+      # Every row lists the same columns: dbt unions the expected rows.
       rows:
         - {player_id: 1, position_group: F, shots_on_goal: 4, goals: 4, xg: 2.0,
            goals_above_expected: 2.0, goals_above_expected_shrunk: 1.0, shrinkage_weight: 0.5,
-           goalie_games: null, gsax: null, gsax_shrunk: null}
+           goalie_games: null, shots_faced: null, goals_allowed: null, xg_faced: null,
+           gsax: null, gsax_per_100_shots: null, gsax_shrunk: null,
+           goalie_shrinkage_weight: null}
         - {player_id: 3, position_group: D, shots_on_goal: 2, goals: 0, xg: 1.0,
            goals_above_expected: -1.0, goals_above_expected_shrunk: 0.5, shrinkage_weight: 0.0,
-           goalie_games: null, gsax: null, gsax_shrunk: null}
+           goalie_games: null, shots_faced: null, goals_allowed: null, xg_faced: null,
+           gsax: null, gsax_per_100_shots: null, gsax_shrunk: null,
+           goalie_shrinkage_weight: null}
         - {player_id: 9, position_group: G, shots_on_goal: 0, goals: 0, xg: 0.0,
            goals_above_expected: 0.0, goals_above_expected_shrunk: null, shrinkage_weight: null,
            goalie_games: 2, shots_faced: 10, goals_allowed: 1, xg_faced: 4.0, gsax: 3.0,
